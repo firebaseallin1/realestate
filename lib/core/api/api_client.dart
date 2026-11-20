@@ -75,16 +75,24 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient();
 
-  /// Set with --dart-define=API_BASE_URL=... An Android emulator reaches this
-  /// computer at 10.0.2.2; a real phone needs the computer's network address.
+  /// The deployed backend on Render, used unless told otherwise.
+  static const productionBaseUrl = 'https://realestate-slns.onrender.com/api/v1';
+
+  /// Render by default. For feature work against a backend on this computer:
+  ///   flutter run --dart-define=USE_LOCAL_API=true
+  /// An Android emulator reaches this computer at 10.0.2.2; a real phone needs
+  /// the computer's network address, given with --dart-define=API_BASE_URL=...
   static String get defaultBaseUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return configured;
+    const useLocal = bool.fromEnvironment('USE_LOCAL_API');
+    if (!useLocal) return productionBaseUrl;
     final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     return isAndroid ? 'http://10.0.2.2:1001/api/v1' : 'http://localhost:1001/api/v1';
   }
 
-  static const _timeout = Duration(seconds: 20);
+  /// Long enough for Render's free plan to wake a sleeping server (~1 minute).
+  static const _timeout = Duration(seconds: 60);
 
   final http.Client _http;
   final TokenStore _tokens;
