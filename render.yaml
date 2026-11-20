@@ -1,0 +1,39 @@
+# Render Blueprint for the Kaira Properties API (NestJS in ./backend).
+# In Render: New > Blueprint > pick this repo. Render asks for every
+# `sync: false` value on the first deploy; secrets never live in git.
+services:
+  - type: web
+    name: kaira-backend
+    runtime: node
+    rootDir: backend
+    # Free sleeps after 15 idle minutes (first call then takes ~1 minute).
+    # Use starter or higher for real users.
+    plan: free
+    # Pick the region closest to your MongoDB Atlas cluster.
+    region: singapore
+    # Dev dependencies hold the Nest CLI and TypeScript, which the build needs
+    # even though NODE_ENV is production.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      # mongodb+srv://USER:PASS@cluster.../kaira_prod?retryWrites=true
+      # The database name is required. In Atlas > Network Access allow 0.0.0.0/0,
+      # since Render's outbound addresses are not fixed on most plans.
+      - key: MONGODB_URI
+        sync: false
+      # Render generates a random 256-bit value once.
+      - key: JWT_SECRET
+        generateValue: true
+      # Web app address(es), comma separated, e.g. https://kaira.example.com
+      # Required in production. Mobile apps send no origin and are always allowed.
+      - key: CORS_ORIGINS
+        sync: false
+      # Optional: enables reading material bills with Claude.
+      - key: ANTHROPIC_API_KEY
+        sync: false
