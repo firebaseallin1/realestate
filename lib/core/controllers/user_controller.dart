@@ -1,41 +1,37 @@
 import 'package:flutter/foundation.dart';
+
 import '../../models/app_user.dart';
+import '../api/api_client.dart';
+import '../repositories/local_user_repository.dart';
+import '../repositories/user_repository.dart';
 
-/// UserController holds the team's accounts (in memory for now): sign-in
-/// checks, and the Admin's Users page (add and remove).
+/// UserController holds the team's accounts for the Admin's Users page and
+/// the Site Incharge pickers. Which accounts arrive depends on the role: the
+/// server gives a Site Manager only the Site Incharges.
 class UserController extends ChangeNotifier {
-  UserController._() {
-    _seedUsers();
-  }
+  UserController(this.repository);
 
-  /// A fresh controller with the demo accounts, for tests.
+  /// A fresh controller with the demo accounts already loaded, for tests.
   @visibleForTesting
-  UserController.test() {
-    _seedUsers();
+  UserController.test() : repository = LocalUserRepository() {
+    _users.addAll((repository as LocalUserRepository).accounts);
   }
 
-  static final UserController instance = UserController._();
+  static final UserController instance = UserController(ApiUserRepository());
 
+  final UserRepository repository;
   final List<AppUser> _users = [];
-  int _nextId = 1;
+  bool _isLoading = false;
+  String? _loadError;
 
-  /// Demo password shared by the seeded accounts.
-  static const String demoPassword = 'kaira123';
+  bool get isLoading => _isLoading;
 
-  void _seedUsers() {
-    _users.addAll(const [
-      AppUser(id: 'u1', name: 'Admin', username: 'admin', password: demoPassword, role: UserRole.admin, phone: '98480 11111'),
-      AppUser(id: 'u2', name: 'Priya Sharma', username: 'sales', password: demoPassword, role: UserRole.salesExecutive, phone: '98480 22222'),
-      AppUser(id: 'u3', name: 'Ravi Kumar', username: 'manager', password: demoPassword, role: UserRole.siteManager, phone: '98480 33333'),
-      AppUser(id: 'u4', name: 'Suresh Reddy', username: 'incharge', password: demoPassword, role: UserRole.siteIncharge, phone: '98480 44444'),
-    ]);
-    _nextId = _users.length + 1;
-  }
+  /// Why the last load failed, for the page to show with a retry.
+  String? get loadError => _loadError;
 
   List<AppUser> get users => List.unmodifiable(_users);
 
-  List<AppUser> usersWithRole(UserRole? role) =>
-      role == null ? users : _users.where((u) => u.role == role).toList();
+  List<AppUser> usersWithRole(UserRole? role) => role == null ? users : _users.where((u) => u.role == role).toList();
 
   int countWithRole(UserRole role) => _users.where((u) => u.role == role).length;
 
@@ -49,21 +45,51 @@ class UserController extends ChangeNotifier {
 
   bool isUsernameTaken(String username) => findByUsername(username) != null;
 
-  /// The user with these credentials, or null. Usernames ignore case.
-  AppUser? authenticate(String username, String password) {
-    final user = findByUsername(username);
-    return user != null && user.password == password ? user : null;
+  Future<void> load() async {
+    _isLoading = true;
+    _loadError = null;
+    notifyListeners();
+    try {
+      final users = await repository.fetchUsers();
+      _users
+        ..clear()
+        ..addAll(users);
+    } on ApiException catch (error) {
+      _loadError = error.message;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  String newId() => 'u${_nextId++}';
+  /// Adds the user on the server. Throws an ApiException if it refuses.
+  Future<AppUser> addUser(NewUser user) async {
+    final created = await repository.createUser(user);
+    _users.add(created);
+    notifyListeners();
+    return created;
+  }
 
-  void addUser(AppUser user) {
-    _users.add(user);
+  /// Saves changes to an account. Throws an ApiException if the server refuses.
+  Future<AppUser> updateUser(String id, UserChanges changes) async {
+    final updated = await repository.updateUser(id, changes);
+    final index = _users.indexWhere((u) => u.id == id);
+    if (index >= 0) _users[index] = updated;
+    notifyListeners();
+    return updated;
+  }
+
+  /// Removes the user on the server. Throws an ApiException if it refuses.
+  Future<void> removeUser(String id) async {
+    await repository.removeUser(id);
+    _users.removeWhere((u) => u.id == id);
     notifyListeners();
   }
 
-  void removeUser(String id) {
-    _users.removeWhere((u) => u.id == id);
+  /// Forgets the accounts on sign-out, so the next user cannot see them.
+  void clear() {
+    _users.clear();
+    _loadError = null;
     notifyListeners();
   }
 }

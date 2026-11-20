@@ -4,6 +4,8 @@ import '../../../core/controllers/site_controller.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../widgets/list_table_switcher.dart';
+import '../../../models/site.dart';
+import '../../../widgets/location_map.dart';
 import '../widgets/location_card.dart';
 import '../widgets/report_table.dart';
 
@@ -13,10 +15,14 @@ class LocationsSection extends StatelessWidget {
   final SiteController controller;
   final ValueChanged<String> onOpenLocation;
 
+  /// Sets a location's map point; null when the user may not change it.
+  final ValueChanged<String>? onSetPoint;
+
   const LocationsSection({
     super.key,
     required this.controller,
     required this.onOpenLocation,
+    this.onSetPoint,
   });
 
   static const double _minCardWidth = 300;
@@ -55,6 +61,7 @@ class LocationsSection extends StatelessWidget {
                     key: ValueKey(summary.name),
                     summary: summary,
                     onOpen: () => onOpenLocation(summary.name),
+                    onSetPoint: onSetPoint == null ? null : () => onSetPoint!(summary.name),
                   ),
                 ),
             ],
@@ -72,6 +79,7 @@ class LocationsSection extends StatelessWidget {
           ReportColumn('Booked', flex: 0.8, numeric: true),
           ReportColumn('Available', flex: 0.9, numeric: true),
           ReportColumn('Sold %', flex: 0.9, numeric: true),
+          ReportColumn('Map', flex: 1.1),
         ],
         rowKeys: [for (final s in summaries) ValueKey('location-row-${s.name}')],
         onRowTap: (i) => onOpenLocation(summaries[i].name),
@@ -86,8 +94,36 @@ class LocationsSection extends StatelessWidget {
               ReportTable.text('${s.bookedUnits}'),
               ReportTable.text('${s.availableUnits}'),
               ReportTable.percent(s.soldRatio),
+              s.point == null
+                  ? ReportTable.text(ReportTable.blank)
+                  : _MapLink(name: s.name, point: s.point!),
             ],
         ],
+      ),
+    );
+  }
+}
+
+/// "View" in the table's Map column, opening the location on the map.
+class _MapLink extends StatelessWidget {
+  final String name;
+  final MapPoint point;
+
+  const _MapLink({required this.name, required this.point});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () => showLocationOnMap(context, name: name, point: point),
+        icon: const Icon(Icons.map_outlined, size: 16),
+        label: const Text('View'),
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          visualDensity: VisualDensity.compact,
+        ),
       ),
     );
   }

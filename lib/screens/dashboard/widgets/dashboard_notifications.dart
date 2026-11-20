@@ -185,7 +185,7 @@ class NotificationBell extends StatelessWidget {
           clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
-            const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimaryLight),
+            Icon(Icons.notifications_none_rounded, color: AppColors.textPrimaryLight),
             if (unreadCount > 0)
               Positioned(
                 top: 6,
@@ -241,7 +241,7 @@ class UserGreeting extends StatelessWidget {
     final avatar = Container(
       width: 36,
       height: 36,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: AppColors.brandGradient,
         shape: BoxShape.circle,
       ),

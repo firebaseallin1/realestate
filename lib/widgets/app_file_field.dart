@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_typography.dart';
 import '../models/site.dart';
+import 'remote_file_bytes.dart';
 
 /// AppFileField attaches one file (image or PDF): a dashed drop-style tile
 /// when empty, and a preview row (thumbnail or PDF badge, name, size) with
@@ -143,7 +144,7 @@ class _AppFileFieldState extends State<AppFileField> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: _loading
-                      ? const Padding(
+                      ? Padding(
                           padding: EdgeInsets.all(11),
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                         )
@@ -165,7 +166,7 @@ class _AppFileFieldState extends State<AppFileField> {
                     ],
                   ),
                 ),
-                const Icon(Icons.upload_rounded, color: AppColors.primary),
+                Icon(Icons.upload_rounded, color: AppColors.primary),
               ],
             ),
           ),
@@ -190,10 +191,14 @@ class _AppFileFieldState extends State<AppFileField> {
               width: 56,
               height: 56,
               child: file.isImage
-                  ? Image.memory(
-                      file.bytes,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _badge(Icons.broken_image_outlined, 'IMG'),
+                  ? RemoteFileBytes(
+                      file: file,
+                      failed: _badge(Icons.broken_image_outlined, 'IMG'),
+                      builder: (_, bytes) => Image.memory(
+                        bytes,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => _badge(Icons.broken_image_outlined, 'IMG'),
+                      ),
                     )
                   : _badge(Icons.picture_as_pdf_rounded, file.extension.toUpperCase()),
             ),
@@ -219,7 +224,7 @@ class _AppFileFieldState extends State<AppFileField> {
           IconButton(
             tooltip: 'Replace',
             onPressed: _loading ? null : _choose,
-            icon: const Icon(Icons.sync_rounded, color: AppColors.primary),
+            icon: Icon(Icons.sync_rounded, color: AppColors.primary),
           ),
           IconButton(
             tooltip: 'Remove',

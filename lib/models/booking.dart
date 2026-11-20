@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/api/json.dart';
 import 'site.dart';
 
 /// BookingType: a plot alone, or a plot with construction by Kaira.
@@ -39,11 +40,17 @@ enum PaymentMode {
 enum LoanStatus {
   applied('Applied'),
   sanctioned('Sanctioned'),
+  partlyDisbursed('Partly Disbursed'),
   disbursed('Disbursed');
 
   const LoanStatus(this.label);
 
   final String label;
+
+  /// Set by hand. The others follow the bank's loan disbursement payments.
+  static const manual = [applied, sanctioned];
+
+  bool get isManual => manual.contains(this);
 }
 
 /// LoanDetails for a part paid with a bank loan.
@@ -59,6 +66,23 @@ class LoanDetails {
     this.reference = '',
     this.status = LoanStatus.applied,
   });
+
+  factory LoanDetails.fromJson(Map<String, dynamic> json) => LoanDetails(
+        bankName: json['bankName'] as String,
+        amount: fromPaise(json['amountPaise'] as num),
+        reference: json['reference'] as String? ?? '',
+        status: LoanStatus.values.byName(json['status'] as String),
+      );
+
+  LoanDetails copyWith({LoanStatus? status}) =>
+      LoanDetails(bankName: bankName, amount: amount, reference: reference, status: status ?? this.status);
+
+  Map<String, dynamic> toJson() => {
+        'bankName': bankName,
+        'amountPaise': toPaise(amount),
+        'reference': reference,
+        'status': status.name,
+      };
 }
 
 /// PaymentPlan is one part's value and how it will be paid.
@@ -74,6 +98,22 @@ class PaymentPlan {
     required this.mode,
     this.loan,
   });
+
+  factory PaymentPlan.fromJson(Map<String, dynamic> json) => PaymentPlan(
+        part: PaymentPart.values.byName(json['part'] as String),
+        value: fromPaise(json['valuePaise'] as num),
+        mode: PaymentMode.values.byName(json['mode'] as String),
+        loan: json['loan'] == null ? null : LoanDetails.fromJson(json['loan'] as Map<String, dynamic>),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'part': part.name,
+        'valuePaise': toPaise(value),
+        'mode': mode.name,
+        if (loan != null) 'loan': loan!.toJson(),
+      };
+
+  PaymentPlan withLoan(LoanDetails loan) => PaymentPlan(part: part, value: value, mode: mode, loan: loan);
 
   /// What the customer pays themselves, beyond the loan.
   double get ownContribution => value - (loan?.amount ?? 0);
@@ -108,6 +148,23 @@ class PaymentEntry {
     required this.method,
     this.reference = '',
   });
+
+  factory PaymentEntry.fromJson(Map<String, dynamic> json) => PaymentEntry(
+        id: json['id'] as String,
+        part: PaymentPart.values.byName(json['part'] as String),
+        amount: fromPaise(json['amountPaise'] as num),
+        date: dayFromJson(json['date'] as String),
+        method: PaymentMethod.values.byName(json['method'] as String),
+        reference: json['reference'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'part': part.name,
+        'amountPaise': toPaise(amount),
+        'date': dayToJson(date),
+        'method': method.name,
+        'reference': reference,
+      };
 }
 
 /// BookingStatus: sales raise bookings, the Admin approves or rejects them.
@@ -135,6 +192,15 @@ class Customer {
     this.email = '',
     this.address = '',
   });
+
+  factory Customer.fromJson(Map<String, dynamic> json) => Customer(
+        name: json['name'] as String,
+        mobile: json['mobile'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        address: json['address'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {'name': name, 'mobile': mobile, 'email': email, 'address': address};
 }
 
 /// Booking is one plot booked for a customer, with its payment plans
@@ -174,6 +240,47 @@ class Booking {
     required this.bookedBy,
   });
 
+  factory Booking.fromJson(Map<String, dynamic> json) => Booking(
+        id: json['id'] as String,
+        siteId: json['siteId'] as String,
+        siteName: json['siteName'] as String,
+        plotNumber: json['plotNumber'] as String,
+        plotId: json['plotId'] as String?,
+        plotSize: json['plotSize'] as String?,
+        facing: json['facing'] == null ? null : PlotFacing.values.byName(json['facing'] as String),
+        customer: Customer.fromJson(json['customer'] as Map<String, dynamic>),
+        type: BookingType.values.byName(json['type'] as String),
+        plans: [
+          for (final plan in json['plans'] as List<dynamic>) PaymentPlan.fromJson(plan as Map<String, dynamic>),
+        ],
+        payments: [
+          for (final payment in json['payments'] as List<dynamic>? ?? const [])
+            PaymentEntry.fromJson(payment as Map<String, dynamic>),
+        ],
+        status: BookingStatus.values.byName(json['status'] as String),
+        bookedOn: dayFromJson(json['bookedOn'] as String),
+        bookedBy: json['bookedBy'] as String,
+      );
+
+  /// What can be corrected on an approved booking.
+  Map<String, dynamic> toUpdateJson() => {
+        'customer': customer.toJson(),
+        'plans': [for (final plan in plans) plan.toJson()],
+      };
+
+  /// What the server needs to raise a booking. It adds the date and who booked.
+  Map<String, dynamic> toCreateJson() => {
+        'siteId': siteId,
+        'plotId': plotId,
+        'plotNumber': plotNumber,
+        'plotSize': plotSize,
+        'facing': facing?.name,
+        'customer': customer.toJson(),
+        'type': type.name,
+        'plans': [for (final plan in plans) plan.toJson()],
+        if (payments.isNotEmpty) 'initialPayments': [for (final payment in payments) payment.toJson()],
+      };
+
   PaymentPlan? plan(PaymentPart part) {
     for (final plan in plans) {
       if (plan.part == part) return plan;
@@ -199,8 +306,18 @@ class Booking {
 
   bool get hasLoan => plans.any((p) => p.mode == PaymentMode.loan);
 
+  /// What the bank has paid so far towards [part]'s loan.
+  double loanReceivedFor(PaymentPart part) => payments
+      .where((p) => p.part == part && p.method == PaymentMethod.loanDisbursement)
+      .fold(0, (sum, p) => sum + p.amount);
+
+  /// The part of [part]'s loan the bank has still to pay.
+  double loanToComeFor(PaymentPart part) => (plan(part)?.loan?.amount ?? 0) - loanReceivedFor(part);
+
   Booking copyWith({
     BookingStatus? status,
+    Customer? customer,
+    List<PaymentPlan>? plans,
     List<PaymentEntry>? payments,
   }) {
     return Booking(
@@ -211,9 +328,9 @@ class Booking {
       plotId: plotId,
       plotSize: plotSize,
       facing: facing,
-      customer: customer,
+      customer: customer ?? this.customer,
       type: type,
-      plans: plans,
+      plans: plans ?? this.plans,
       payments: payments ?? this.payments,
       status: status ?? this.status,
       bookedOn: bookedOn,

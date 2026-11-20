@@ -14,6 +14,14 @@ import 'package:real_estate/screens/construction/widgets/material_bill_form.dart
 import 'package:real_estate/widgets/app_file_field.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as pdf;
 
+/// A short bill with every rate, to scan more than once.
+const _repeatBill = '''
+Sri Sai Traders
+Invoice No: SST/300        Date: 20/10/2026
+S.No  Description  HSN  Qty  Unit  Rate  Amount
+1  Cement OPC 53  2523  100  Bags  390.00  39,000.00
+''';
+
 const _sampleBill = '''
 Sri Sai Traders
 12-4, Main Road, Vizag
@@ -340,6 +348,71 @@ void main() {
       }
     });
 
+    testWidgets('A bill scanned again is warned about; its items add to the quantities, with history', (tester) async {
+      var bytes = Uint8List.fromList([1, 2, 3, 4]);
+      AppFileField.pickOverride = (_) async => SiteFile(name: 'bill.pdf', bytes: bytes);
+      MaterialBillReader.readTextOverride = (_) async => _repeatBill;
+
+      final c = _controller();
+      final project = c.projectById('b3')!;
+      final before = project.materials.length;
+      await _pumpMaterials(tester, c, desktop);
+
+      await _tap(tester, find.byKey(const ValueKey('bill-upload')));
+      await _tap(tester, find.byKey(const ValueKey('bill-submit')));
+      expect(project.materials.length, before + 1);
+      final cement = project.materials.last;
+      expect(cement.quantity, 100);
+      await _clearSnackBar(tester);
+
+      // The same file again: asked first, and Cancel stops there.
+      await _tap(tester, find.byKey(const ValueKey('bill-upload')));
+      expect(find.byKey(const ValueKey('duplicate-bill')), findsOneWidget);
+      expect(find.textContaining('This bill was already scanned on'), findsOneWidget);
+      expect(find.textContaining('(Bill SST/300)'), findsOneWidget);
+      await _tap(tester, find.byKey(const ValueKey('duplicate-cancel')));
+      expect(find.text('Review Bill'), findsNothing);
+      expect(project.bills.length, 1);
+
+      // Adding it again adds to the cement, not a second cement.
+      await _tap(tester, find.byKey(const ValueKey('bill-upload')));
+      await _tap(tester, find.byKey(const ValueKey('duplicate-confirm')));
+      await _tap(tester, find.byKey(const ValueKey('bill-submit')));
+      expect(project.bills.length, 2);
+      expect(project.materials.length, before + 1);
+      expect(project.materialById(cement.id)!.quantity, 200);
+      await _clearSnackBar(tester);
+
+      // Another copy of the same bill (same number and supplier) at a new price:
+      // asked when saving.
+      bytes = Uint8List.fromList([9, 9, 9]);
+      MaterialBillReader.readTextOverride = (_) async => _repeatBill.replaceAll('390.00', '400.00');
+      await _tap(tester, find.byKey(const ValueKey('bill-upload')));
+      expect(find.text('Review Bill'), findsOneWidget);
+      await _tap(tester, find.byKey(const ValueKey('bill-submit')));
+      expect(find.byKey(const ValueKey('duplicate-bill')), findsOneWidget);
+      await _tap(tester, find.byKey(const ValueKey('duplicate-confirm')));
+      expect(find.text('Review Bill'), findsNothing);
+      final updated = project.materialById(cement.id)!;
+      expect(updated.quantity, 300);
+      expect(updated.rate, 400);
+      expect(updated.amount, 120000);
+      expect(updated.receipts.map((r) => r.rate), [390, 390, 400]);
+      expect(project.materialsOfBill(project.bills.last.id).single.quantity, 100);
+      await _clearSnackBar(tester);
+
+      // The history: every scan, newest first, with its price and date.
+      await _tap(tester, find.byKey(ValueKey('material-history-${cement.id}')));
+      expect(find.byKey(const ValueKey('material-history')), findsOneWidget);
+      expect(find.textContaining('Received 3 times'), findsWidgets);
+      expect(find.byKey(const ValueKey('history-row-2')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const ValueKey('history-row-0')), matching: find.textContaining('at ₹400')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Scanned on'), findsNWidgets(3));
+    });
+
     testWidgets('The uploaded bill stays in view next to the list, for comparing', (tester) async {
       AppFileField.pickOverride = (_) async => SiteFile(name: 'bill.pdf', bytes: Uint8List(4));
       MaterialBillReader.readTextOverride = (_) async => _sampleBill;
@@ -383,7 +456,7 @@ void main() {
 
       // Cancel returns to the materials, with nothing saved.
       await _tap(tester, find.text('Cancel'));
-      expect(find.text('Scan a Material Bill'), findsOneWidget);
+      expect(find.byKey(const ValueKey('bill-upload')), findsOneWidget);
     });
 
     testWidgets('A saved bill opens next to its items too', (tester) async {

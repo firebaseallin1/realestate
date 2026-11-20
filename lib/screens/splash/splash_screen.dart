@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/controllers/auth_controller.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../widgets/app_brand_logo.dart';
 
 /// SplashScreen displays a clean white branded entry screen with sage green accents,
-/// smooth animations and automatic routing to the login page.
+/// smooth animations and automatic routing to the dashboard or login page.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -40,12 +41,18 @@ class _SplashScreenState extends State<SplashScreen>
     _animController.forward();
 
     // Auto navigate after 2.5 seconds
-    _timer = Timer(const Duration(milliseconds: 2500), _navigateToLogin);
+    _timer = Timer(const Duration(milliseconds: 2500), _navigate);
   }
 
-  void _navigateToLogin() {
+  /// Resumes a saved sign-in if there is one, otherwise goes to login.
+  Future<void> _navigate() async {
+    final user = await AuthController().restoreSession();
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+    if (user != null) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard, arguments: user);
+    } else {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+    }
   }
 
   @override
@@ -118,7 +125,7 @@ class _SplashScreenState extends State<SplashScreen>
               opacity: _fadeAnimation,
               child: Column(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 36,
                     height: 36,
                     child: CircularProgressIndicator(

@@ -228,7 +228,6 @@ void main() {
     for (final size in [_desktop, _phone]) {
       ListTableSwitcher.reset();
       final construction = ConstructionController(_bookings());
-      final project = construction.projectById('b3')!;
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -249,18 +248,11 @@ void main() {
       await _table(tester, 'daily-work');
       expect(find.byKey(const ValueKey('daily-row-d1')), findsOneWidget);
 
-      // Workers: pay from the row.
+      // Workers: no pay button; payments are a separate process.
       await _tap(tester, find.byKey(const ValueKey('tab-workers')));
       await _table(tester, 'workers');
-      final pay = find.byKey(const ValueKey('pay-worker-w1'));
-      await tester.dragUntilVisible(pay, find.byKey(const ValueKey('worker-row-w1')), const Offset(-300, 0));
-      await tester.pumpAndSettle();
-      await tester.tap(pay);
-      await tester.pumpAndSettle();
-      await _tap(tester, find.byKey(const ValueKey('expense-submit')));
-      expect(project.wagesDue('w1'), 0);
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('worker-row-w1')), findsOneWidget);
+      expect(find.text('Pay Wages'), findsNothing);
 
       // Materials: edit from the row.
       await _tap(tester, find.byKey(const ValueKey('tab-materials')));

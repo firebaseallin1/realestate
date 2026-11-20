@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../core/api/api_client.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/responsive.dart';
@@ -46,6 +48,68 @@ Future<void> showAppForm(BuildContext context, Widget form) async {
       ),
     );
   }
+}
+
+bool _saving = false;
+
+/// Runs a save, returning true if it worked. A slow save shows a spinner that
+/// blocks the screen, and a refusal is shown in a dialog so it appears above
+/// any open form, leaving what was typed in place to correct.
+Future<bool> runSave(BuildContext context, Future<void> Function() save) async {
+  if (_saving) return false; // A second tap while the first is still saving.
+  _saving = true;
+
+  final navigator = Navigator.of(context, rootNavigator: true);
+  var spinnerShown = false;
+  final spinner = Timer(const Duration(milliseconds: 300), () {
+    spinnerShown = true;
+    showDialog<void>(
+      context: navigator.context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(child: CircularProgressIndicator(color: AppColors.pureWhite)),
+      ),
+    );
+  });
+
+  String? problem;
+  var sessionEnded = false;
+  try {
+    await save();
+  } on ApiException catch (error) {
+    problem = error.message;
+    sessionEnded = error.code == 'SESSION_ENDED';
+  } catch (error, stack) {
+    debugPrint('Save failed: $error\n$stack');
+    problem = 'Something went wrong. Please try again.';
+  }
+
+  spinner.cancel();
+  _saving = false;
+  // After a sign-in ends the app has already gone to the login screen.
+  if (sessionEnded) return false;
+  if (spinnerShown && navigator.mounted) navigator.pop();
+
+  if (problem != null && navigator.mounted) {
+    await showDialog<void>(
+      context: navigator.context,
+      builder: (context) => Theme(
+        data: AppTheme.lightTheme,
+        child: AlertDialog(
+          key: const ValueKey('save-problem'),
+          backgroundColor: AppColors.pureWhite,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Text(problem!),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+          ],
+        ),
+      ),
+    );
+  }
+  return problem == null;
 }
 
 /// Floating snackbar in the brand color, narrower on web.

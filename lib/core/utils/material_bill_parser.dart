@@ -1,3 +1,4 @@
+import '../api/json.dart';
 import 'money_text.dart';
 
 /// One item read off a bill. [needsCheck] marks a line the parser could not
@@ -38,6 +39,24 @@ class ParsedBill {
     this.total,
     this.lines = const [],
   });
+
+  /// A bill as read by the server's AI reader (POST /bills/read).
+  factory ParsedBill.fromServer(Map<String, dynamic> json) => ParsedBill(
+    supplier: json['supplier'] as String? ?? '',
+    billNumber: json['billNumber'] as String? ?? '',
+    date: json['date'] == null ? null : dayFromJson(json['date'] as String),
+    total: json['totalPaise'] == null ? null : fromPaise(json['totalPaise'] as num),
+    lines: [
+      for (final row in json['lines'] as List<dynamic>)
+        ParsedBillLine(
+          name: (row as Map<String, dynamic>)['name'] as String,
+          quantity: (row['quantity'] as num).toDouble(),
+          unit: row['unit'] as String,
+          rate: fromPaise(row['ratePaise'] as num),
+          needsCheck: row['needsCheck'] as bool? ?? false,
+        ),
+    ],
+  );
 }
 
 /// A piece of text and where it sits on the photo or PDF page.

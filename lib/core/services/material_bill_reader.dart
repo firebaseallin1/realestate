@@ -30,6 +30,9 @@ class MaterialBillReader {
   static bool get canCapture => captureOverride != null || billOcrAvailable;
 
   /// The file types the device can read.
+  /// What the server's AI reader takes: PDFs and photos, on every platform.
+  static const List<String> serverExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+
   static List<String> get extensions => ['pdf', if (canCapture) ...['jpg', 'jpeg', 'png']];
 
   /// Takes a photo of a bill; null when the user backs out.

@@ -99,7 +99,7 @@ class _DashboardWebViewState extends State<DashboardWebView> {
       curve: Curves.easeOutCubic,
       width: collapsed ? _collapsedWidth : _expandedWidth,
       clipBehavior: Clip.hardEdge,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [AppColors.brandDark, AppColors.brandDeep],
           begin: Alignment.topCenter,
@@ -126,7 +126,7 @@ class _DashboardWebViewState extends State<DashboardWebView> {
     return Container(
       height: 68,
       padding: const EdgeInsets.only(left: 12, right: 20),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.pureWhite,
         border: Border(bottom: BorderSide(color: AppColors.lightBorder)),
       ),
@@ -138,7 +138,7 @@ class _DashboardWebViewState extends State<DashboardWebView> {
             onPressed: _toggleSidebar,
             style: IconButton.styleFrom(
               backgroundColor: AppColors.offWhite,
-              side: const BorderSide(color: AppColors.lightBorder),
+              side: BorderSide(color: AppColors.lightBorder),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             icon: Icon(
@@ -217,7 +217,7 @@ class _DashboardWebViewState extends State<DashboardWebView> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.calendar_today_rounded, size: 15, color: AppColors.primary),
+                Icon(Icons.calendar_today_rounded, size: 15, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Text(
                   DateText.longDate(now),

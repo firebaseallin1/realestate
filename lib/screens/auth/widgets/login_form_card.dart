@@ -32,7 +32,7 @@ class LoginFormCard extends StatelessWidget {
   /// Taller inputs for the login screen, on a soft mint-white fill.
   static const _fieldPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 20);
   static const _fieldGap = EdgeInsets.only(bottom: 22);
-  static const _fieldFill = AppColors.offWhite;
+  static Color get _fieldFill => AppColors.offWhite;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +61,7 @@ class LoginFormCard extends StatelessWidget {
           // Sage accent strip
           Container(
             height: 6,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [AppColors.brandDeep, AppColors.sage, AppColors.sageMid, AppColors.mint],
               ),
@@ -138,9 +138,6 @@ class LoginFormCard extends StatelessWidget {
                       if (value == null || value.isEmpty) {
                         return 'Please enter your password.';
                       }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters.';
-                      }
                       return null;
                     },
                     onFieldSubmitted: (_) => onSubmit(),
@@ -163,7 +160,7 @@ class LoginFormCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.verified_user_outlined, size: 15, color: AppColors.primary),
+                      Icon(Icons.verified_user_outlined, size: 15, color: AppColors.primary),
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(

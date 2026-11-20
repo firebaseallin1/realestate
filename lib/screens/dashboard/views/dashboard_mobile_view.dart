@@ -43,7 +43,7 @@ class DashboardMobileView extends StatelessWidget {
           borderRadius: BorderRadius.horizontal(right: Radius.circular(24)),
         ),
         child: DecoratedBox(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [AppColors.brandDark, AppColors.brandDeep],
               begin: Alignment.topCenter,
@@ -130,10 +130,10 @@ class DashboardMobileView extends StatelessWidget {
               onPressed: () => Scaffold.of(context).openDrawer(),
               style: IconButton.styleFrom(
                 backgroundColor: AppColors.pureWhite,
-                side: const BorderSide(color: AppColors.lightBorder),
+                side: BorderSide(color: AppColors.lightBorder),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimaryLight),
+              icon: Icon(Icons.menu_rounded, color: AppColors.textPrimaryLight),
             ),
           ),
           const SizedBox(width: 8),

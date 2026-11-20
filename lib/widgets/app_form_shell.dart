@@ -71,7 +71,7 @@ class AppFormShell extends StatelessWidget {
               IconButton(
                 tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
+                icon: Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
               ),
             ],
           ),
@@ -142,7 +142,7 @@ class AppDateField extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.event_rounded, size: 20, color: AppColors.textSecondaryLight),
+              Icon(Icons.event_rounded, size: 20, color: AppColors.textSecondaryLight),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(

@@ -24,10 +24,14 @@ class _PropertyBookingSectionState extends State<PropertyBookingSection> {
   /// Null shows both types.
   BookingType? _type;
 
+  /// Null shows every approval status.
+  BookingStatus? _status;
+
   @override
   Widget build(BuildContext context) {
     final all = widget.controller.bookings;
-    final shown = _type == null ? all : all.where((b) => b.type == _type).toList();
+    final ofType = _type == null ? all : all.where((b) => b.type == _type).toList();
+    final shown = _status == null ? ofType : ofType.where((b) => b.status == _status).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -41,13 +45,24 @@ class _PropertyBookingSectionState extends State<PropertyBookingSection> {
             for (final type in BookingType.values) (type, type.label, all.where((b) => b.type == type).length),
           ],
         ),
+        const SizedBox(height: 8),
+        FilterChips<BookingStatus>(
+          keyPrefix: 'booking-status',
+          selected: _status,
+          onSelected: (status) => setState(() => _status = status),
+          options: [
+            (null, 'Any status', ofType.length),
+            for (final status in BookingStatus.values)
+              (status, status.label, ofType.where((b) => b.status == status).length),
+          ],
+        ),
         const SizedBox(height: 12),
         ListTableSwitcher(
           id: 'bookings',
           empty: shown.isEmpty
-              ? const EmptyNote(
+              ? EmptyNote(
                   icon: Icons.event_available_outlined,
-                  text: 'No bookings yet. Create one with New Booking.',
+                  text: all.isEmpty ? 'No bookings yet. Create one with New Booking.' : 'No bookings match these filters.',
                 )
               : null,
           list: (_) => CardWrap(

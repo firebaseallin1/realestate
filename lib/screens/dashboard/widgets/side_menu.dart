@@ -201,7 +201,7 @@ class _SideMenuState extends State<SideMenu> {
                     AnimatedRotation(
                       turns: expanded ? 0.5 : 0,
                       duration: const Duration(milliseconds: 200),
-                      child: const Icon(
+                      child: Icon(
                         Icons.keyboard_arrow_down_rounded,
                         size: 20,
                         color: AppColors.textSecondaryDark,
@@ -327,7 +327,7 @@ class _SideMenuState extends State<SideMenu> {
     final logout = IconButton(
       tooltip: 'Logout',
       onPressed: widget.onLogout,
-      icon: const Icon(Icons.logout_rounded, size: 20, color: AppColors.textSecondaryDark),
+      icon: Icon(Icons.logout_rounded, size: 20, color: AppColors.textSecondaryDark),
     );
 
     if (!showLabels) {

@@ -9,7 +9,10 @@ import '../../core/utils/responsive.dart';
 import '../../models/site.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_file_field.dart';
+import '../../widgets/app_form_sheet.dart';
+import '../../widgets/full_screen_dialog.dart';
 import '../../widgets/list_table_switcher.dart';
+import '../booking/widgets/booking_widgets.dart';
 import '../dashboard/widgets/dashboard_panel.dart';
 import '../dashboard/widgets/report_table.dart';
 import 'widgets/plot_canvas.dart';
@@ -28,6 +31,15 @@ class SiteLayoutScreen extends StatefulWidget {
     required this.siteId,
     required this.controller,
   });
+
+  /// Opens the layout as a full-screen dialog: it slides up over the
+  /// dashboard, which stays dimmed behind it on wide screens.
+  static Future<void> open(BuildContext context, {required String siteId, required SiteController controller}) =>
+      pushFullScreenDialog(
+        context,
+        (_) => SiteLayoutScreen(siteId: siteId, controller: controller),
+        label: 'Plot layout',
+      );
 
   @override
   State<SiteLayoutScreen> createState() => _SiteLayoutScreenState();
@@ -54,9 +66,8 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
 
   Site? get _site => widget.controller.siteById(widget.siteId);
 
-  void _savePlots(Site site, List<Plot> plots) {
-    widget.controller.updateSite(site.withPlots(plots));
-  }
+  Future<bool> _savePlots(Site site, List<Plot> plots) =>
+      runSave(context, () => widget.controller.savePlots(site, plots));
 
   /// Next free plot number: one more than the highest numeric one.
   String _suggestNumber(Site site) {
@@ -89,12 +100,14 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
           Navigator.of(context).pop();
           _savePlots(site, [for (final p in site.plots) p.id == updated.id ? updated : p]);
         },
-        onDelete: () {
+        onDelete: () async {
           Navigator.of(context).pop();
-          _savePlots(site, site.plots.where((p) => p.id != plot.id).toList());
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Plot ${plot.number} deleted.')),
-          );
+          final saved = await _savePlots(site, site.plots.where((p) => p.id != plot.id).toList());
+          if (saved && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Plot ${plot.number} deleted.')),
+            );
+          }
         },
       ),
     );
@@ -103,7 +116,9 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
   Future<void> _uploadMap(Site site) async {
     try {
       final file = await AppFileField.pick(SiteFile.imageExtensions);
-      if (file != null) widget.controller.updateSite(site.copyWith(siteMap: file));
+      if (file != null && mounted) {
+        await runSave(context, () => widget.controller.updateSite(site.copyWith(siteMap: file)));
+      }
     } catch (error, stack) {
       debugPrint('Site map pick failed: $error\n$stack');
       if (mounted) {
@@ -162,7 +177,7 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
   Widget build(BuildContext context) {
     final site = _site;
 
-    return Theme(
+    final page = Theme(
       data: AppTheme.lightTheme,
       child: Scaffold(
         backgroundColor: AppColors.offWhite,
@@ -183,7 +198,7 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
                             padding: EdgeInsets.all(wide ? 20 : 12),
                             child: Center(
                               child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 1400),
+                                constraints: const BoxConstraints(maxWidth: 1300),
                                 child: _buildBody(site, wide),
                               ),
                             ),
@@ -191,40 +206,34 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
                         },
                       ),
                     ),
+                    _buildActions(site),
                   ],
                 ),
         ),
       ),
     );
+
+    return FullScreenDialogFrame(child: page);
   }
 
+  /// Same header as the Booking and Construction pages: back, title,
+  /// one line of detail, and a summary chip on the right.
   Widget _buildHeader(Site site) {
+    final plots = site.plots.length;
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 10, 20, 10),
-      decoration: const BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
+      decoration: BoxDecoration(
         color: AppColors.pureWhite,
         border: Border(bottom: BorderSide(color: AppColors.lightBorder)),
       ),
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'Back',
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimaryLight),
-          ),
-          const SizedBox(width: 6),
+          const AppBackButton(),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'PLOT LAYOUT',
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
-                ),
                 Text(
                   site.name,
                   maxLines: 1,
@@ -235,11 +244,19 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
                   ),
                 ),
                 Text(
-                  '${site.location} • ${site.type.label}',
-                  style: AppTypography.caption.copyWith(color: AppColors.textMutedLight),
+                  'Plot layout · ${site.location} · ${site.type.label}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodySmall.copyWith(color: AppColors.textMutedLight),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          BookingChip(
+            label: '$plots ${plots == 1 ? 'plot' : 'plots'}',
+            icon: Icons.grid_view_rounded,
+            color: AppColors.primary,
           ),
         ],
       ),
@@ -247,109 +264,142 @@ class _SiteLayoutScreenState extends State<SiteLayoutScreen> {
   }
 
   Widget _buildBody(Site site, bool wide) {
-    final canvasCard = Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.pureWhite,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _drawing ? AppColors.primary : AppColors.lightBorder, width: _drawing ? 2 : 1),
-      ),
-      child: PlotCanvas(
-        site: site,
-        drawing: _drawing,
-        onDrawn: (rect) => _onDrawn(site, rect),
-        onPlotTap: (plot) => _editPlot(site, plot),
-      ),
-    );
     final list = _PlotList(site: site, onTap: (plot) => _editPlot(site, plot));
 
+    if (wide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _buildLayoutCard(site)),
+          const SizedBox(width: 16),
+          SizedBox(width: 360, child: list),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildToolbar(site),
-        const SizedBox(height: 12),
-        if (wide)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: canvasCard),
-              const SizedBox(width: 14),
-              SizedBox(width: 360, child: list),
-            ],
-          )
-        else ...[
-          canvasCard,
-          const SizedBox(height: 12),
-          list,
-        ],
+        _buildLayoutCard(site),
+        const SizedBox(height: 14),
+        list,
       ],
     );
   }
 
-  Widget _buildToolbar(Site site) {
+  /// The drawing in a titled card, with the status key above it.
+  Widget _buildLayoutCard(Site site) {
     int count(PlotStatus s) => site.plots.where((p) => p.status == s).length;
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        _drawing
-            ? AppButton.outline(
-                key: const ValueKey('toggle-draw'),
-                text: 'Done Drawing',
-                width: null,
-                height: 46,
-                icon: const Icon(Icons.check_rounded, color: AppColors.primary, size: 18),
-                onPressed: () => setState(() => _drawing = false),
-              )
-            : AppButton.primary(
-                key: const ValueKey('toggle-draw'),
-                text: 'Draw Plot',
-                width: null,
-                height: 46,
-                icon: const Icon(Icons.draw_rounded, color: Colors.white, size: 16),
-                onPressed: () => setState(() => _drawing = true),
+    return DashboardPanel(
+      title: 'Layout',
+      subtitle: site.siteMap == null ? 'Drawn on graph paper' : 'Drawn over the site map',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final status in PlotStatus.values)
+                _LegendChip(
+                  color: plotStatusColor(status),
+                  label: '${status.label} ${count(status)}',
+                ),
+            ],
+          ),
+          if (_drawing) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.mint.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
               ),
-        AppButton.outline(
-          text: site.siteMap == null ? 'Upload Site Map' : 'Replace Site Map',
-          width: null,
-          height: 46,
-          icon: const Icon(Icons.map_outlined, color: AppColors.primary, size: 18),
-          onPressed: () => _uploadMap(site),
-        ),
-        if (_drawing)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.mint.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.touch_app_rounded, size: 16, color: AppColors.primary),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    'Drag on the layout to draw a plot',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodySmall.copyWith(
-                      color: AppColors.textPrimaryLight,
-                      fontWeight: FontWeight.w600,
+              child: Row(
+                children: [
+                  Icon(Icons.touch_app_rounded, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Drag on the layout to draw a plot',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.textPrimaryLight,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _drawing ? AppColors.primary : AppColors.lightBorder,
+                width: _drawing ? 2 : 1,
+              ),
+            ),
+            child: PlotCanvas(
+              site: site,
+              drawing: _drawing,
+              onDrawn: (rect) => _onDrawn(site, rect),
+              onPlotTap: (plot) => _editPlot(site, plot),
             ),
           ),
-        for (final status in PlotStatus.values)
-          _LegendChip(
-            color: plotStatusColor(status),
-            label: '${status.label} ${count(status)}',
-          ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  /// Bottom bar, as on the Booking page: buttons on the right on web,
+  /// sharing the width on phones.
+  Widget _buildActions(Site site) {
+    final wide = Responsive.isWeb(context);
+    final buttons = <Widget>[
+      AppButton.outline(
+        key: const ValueKey('site-map-button'),
+        text: site.siteMap == null ? 'Upload Site Map' : 'Replace Site Map',
+        width: wide ? 210 : double.infinity,
+        icon: Icon(Icons.map_outlined, color: AppColors.primary, size: 18),
+        onPressed: () => _uploadMap(site),
+      ),
+      _drawing
+          ? AppButton.primary(
+              key: const ValueKey('toggle-draw'),
+              text: 'Done Drawing',
+              width: wide ? 190 : double.infinity,
+              gradient: AppColors.brandGradient,
+              icon: const Icon(Icons.check_rounded, color: Colors.white, size: 18),
+              onPressed: () => setState(() => _drawing = false),
+            )
+          : AppButton.primary(
+              key: const ValueKey('toggle-draw'),
+              text: 'Draw Plot',
+              width: wide ? 190 : double.infinity,
+              gradient: AppColors.brandGradient,
+              icon: const Icon(Icons.draw_rounded, color: Colors.white, size: 16),
+              onPressed: () => setState(() => _drawing = true),
+            ),
+    ];
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 12, wide ? 32 : 16, 12),
+      decoration: BoxDecoration(
+        color: AppColors.pureWhite,
+        border: Border(top: BorderSide(color: AppColors.lightBorder)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          for (var i = 0; i < buttons.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            wide ? buttons[i] : Expanded(child: buttons[i]),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -363,9 +413,9 @@ class _LegendChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.pureWhite,
+        color: AppColors.lightSurfaceVariant,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.lightBorder),
       ),
@@ -431,7 +481,7 @@ class _PlotList extends StatelessWidget {
               list: (_) => Column(
                 children: [
                   for (var i = 0; i < plots.length; i++) ...[
-                    if (i > 0) const Divider(height: 1, color: AppColors.lightBorder),
+                    if (i > 0) Divider(height: 1, color: AppColors.lightBorder),
                     InkWell(
                       onTap: () => onTap(plots[i]),
                       borderRadius: BorderRadius.circular(10),
@@ -517,7 +567,7 @@ class _PlotRow extends StatelessWidget {
                 children: [
                   Transform.rotate(
                     angle: plot.facing.degrees * math.pi / 180,
-                    child: const Icon(Icons.navigation_rounded, size: 12, color: AppColors.textMutedLight),
+                    child: Icon(Icons.navigation_rounded, size: 12, color: AppColors.textMutedLight),
                   ),
                   const SizedBox(width: 4),
                   Flexible(

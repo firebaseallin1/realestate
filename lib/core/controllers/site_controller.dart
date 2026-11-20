@@ -1,28 +1,35 @@
 import 'package:flutter/material.dart';
+
 import '../../models/site.dart';
+import '../repositories/site_repository.dart';
 
 /// SiteController holds every location and every site across them, plus
 /// the dashboard's location filter and search. Locations can be added on
 /// their own, and adding a site in a new city also creates that location.
 ///
-/// Data is kept in memory for now; swap [_sites] for an API later.
+/// The app's [instance] loads from and saves to the server, which throws an
+/// ApiException if it refuses a change. Test controllers have no repository
+/// and work on sample data in memory.
 class SiteController extends ChangeNotifier {
   static final SiteController instance = SiteController._internal();
 
   factory SiteController() => instance;
 
-  SiteController._internal() {
-    _seedLocations();
-  }
+  SiteController._internal() : _repository = SiteRepository();
 
   /// Fresh controller with its own data, for tests.
   @visibleForTesting
-  SiteController.test() {
+  SiteController.test() : _repository = null {
+    _sites.addAll(_sampleSites);
     _seedLocations();
   }
 
-  final List<Site> _sites = [
-    const Site(
+  final SiteRepository? _repository;
+
+  final List<Site> _sites = [];
+
+  static const List<Site> _sampleSites = [
+    Site(
       id: 's1',
       name: 'Kaira Green Meadows',
       location: 'Hyderabad',
@@ -32,7 +39,7 @@ class SiteController extends ChangeNotifier {
       soldUnits: 168,
       bookedUnits: 22,
     ),
-    const Site(
+    Site(
       id: 's2',
       name: 'Kaira Skyline Towers',
       location: 'Hyderabad',
@@ -42,7 +49,7 @@ class SiteController extends ChangeNotifier {
       soldUnits: 141,
       bookedUnits: 36,
     ),
-    const Site(
+    Site(
       id: 's3',
       name: 'Kaira Lake View Villas',
       location: 'Hyderabad',
@@ -51,7 +58,7 @@ class SiteController extends ChangeNotifier {
       totalUnits: 64,
       bookedUnits: 18,
     ),
-    const Site(
+    Site(
       id: 's4',
       name: 'Kaira Orchid Enclave',
       location: 'Bengaluru',
@@ -61,7 +68,7 @@ class SiteController extends ChangeNotifier {
       soldUnits: 196,
       bookedUnits: 30,
     ),
-    const Site(
+    Site(
       id: 's5',
       name: 'Kaira Tech Park Plaza',
       location: 'Bengaluru',
@@ -70,7 +77,7 @@ class SiteController extends ChangeNotifier {
       totalUnits: 90,
       bookedUnits: 12,
     ),
-    const Site(
+    Site(
       id: 's6',
       name: 'Kaira Coastal Residency',
       location: 'Chennai',
@@ -79,7 +86,7 @@ class SiteController extends ChangeNotifier {
       totalUnits: 180,
       soldUnits: 180,
     ),
-    const Site(
+    Site(
       id: 's7',
       name: 'Kaira River Front Plots',
       location: 'Vijayawada',
@@ -93,6 +100,9 @@ class SiteController extends ChangeNotifier {
 
   /// Every managed location, including ones that have no sites yet.
   final List<String> _locations = [];
+
+  /// Server IDs and map points of locations, by lowercase name.
+  final Map<String, LocationInfo> _locationInfo = {};
 
   /// Starts the location list from the sample sites.
   void _seedLocations() {
@@ -110,6 +120,9 @@ class SiteController extends ChangeNotifier {
   String get query => _query;
 
   List<String> get locations => [..._locations]..sort();
+
+  /// Where [location] is on the map, or null if no point was picked.
+  MapPoint? pointOf(String location) => _locationInfo[location.trim().toLowerCase()]?.point;
 
   /// The stored spelling of [name] if it is already a location
   /// (ignoring case and surrounding spaces), otherwise null.
@@ -143,12 +156,10 @@ class SiteController extends ChangeNotifier {
   }
 
   /// Sites at [location], or every site when it is null. Ignores search.
-  List<Site> sitesIn(String? location) => location == null
-      ? sites
-      : _sites.where((s) => s.location == location).toList();
+  List<Site> sitesIn(String? location) =>
+      location == null ? sites : _sites.where((s) => s.location == location).toList();
 
-  int siteCountAt(String location) =>
-      _sites.where((s) => s.location == location).length;
+  int siteCountAt(String location) => _sites.where((s) => s.location == location).length;
 
   List<LocationSummary> get locationSummaries {
     return locations.map((name) {
@@ -160,6 +171,7 @@ class SiteController extends ChangeNotifier {
         soldUnits: atLocation.fold(0, (sum, s) => sum + s.soldUnits),
         bookedUnits: atLocation.fold(0, (sum, s) => sum + s.bookedUnits),
         types: atLocation.map((s) => s.type).toSet(),
+        point: pointOf(name),
       );
     }).toList();
   }
@@ -170,8 +182,7 @@ class SiteController extends ChangeNotifier {
     return sorted.take(count).toList();
   }
 
-  int countWithStatus(SiteStatus status) =>
-      _sites.where((s) => s.status == status).length;
+  int countWithStatus(SiteStatus status) => _sites.where((s) => s.status == status).length;
 
   // Portfolio totals across every location
   int get totalUnits => _sites.fold(0, (sum, s) => sum + s.totalUnits);
@@ -209,13 +220,107 @@ class SiteController extends ChangeNotifier {
     if (findLocation(name) == null) _locations.add(name.trim());
   }
 
-  void addSite(Site site) {
-    _ensureLocation(site.location);
-    _sites.add(site);
+  /// Fetches the sites and locations from the server.
+  Future<void> load() async {
+    final repository = _repository;
+    if (repository == null) return;
+    final results = await Future.wait([repository.fetchSites(), repository.fetchLocations()]);
+    _sites
+      ..clear()
+      ..addAll(results[0] as List<Site>);
+    final locations = results[1] as List<LocationInfo>;
+    _locations
+      ..clear()
+      ..addAll(locations.map((l) => l.name));
+    _locationInfo
+      ..clear()
+      ..addEntries(locations.map((l) => MapEntry(l.name.toLowerCase(), l)));
     notifyListeners();
   }
 
-  void updateSite(Site site) {
+  /// Forgets everything on sign-out, so the next user cannot see it.
+  void clear() {
+    _sites.clear();
+    _locations.clear();
+    _locationInfo.clear();
+    _selectedLocation = null;
+    _query = '';
+    notifyListeners();
+  }
+
+  /// Adds a location, with its map point if one was picked, on the
+  /// server, or in memory for tests.
+  Future<void> saveLocation(String name, {MapPoint? point}) async {
+    final repository = _repository;
+    if (repository == null) {
+      if (addLocation(name) && point != null) {
+        _locationInfo[name.trim().toLowerCase()] = LocationInfo(name: name.trim(), point: point);
+        notifyListeners();
+      }
+      return;
+    }
+    final saved = await repository.addLocation(name.trim(), point: point);
+    _locations.add(saved.name);
+    _locationInfo[saved.name.toLowerCase()] = saved;
+    notifyListeners();
+  }
+
+  /// Sets where an existing location is on the map, or clears it.
+  Future<void> setLocationPoint(String name, MapPoint? point) async {
+    final key = name.trim().toLowerCase();
+    final repository = _repository;
+    if (repository == null) {
+      _locationInfo[key] = LocationInfo(name: name.trim(), point: point);
+      notifyListeners();
+      return;
+    }
+    // A location made by adding a site arrives without its ID until reloaded.
+    var id = _locationInfo[key]?.id;
+    if (id == null) {
+      for (final location in await repository.fetchLocations()) {
+        _locationInfo[location.name.toLowerCase()] = location;
+      }
+      id = _locationInfo[key]?.id;
+    }
+    if (id == null) throw StateError('$name is not a saved location.');
+    _locationInfo[key] = await repository.setLocationPoint(id, point);
+    notifyListeners();
+  }
+
+  Future<void> addSite(Site site) async {
+    final repository = _repository;
+    if (repository == null) {
+      _ensureLocation(site.location);
+      _sites.add(site);
+      notifyListeners();
+      return;
+    }
+    final saved = await repository.createSite(site);
+    _ensureLocation(saved.location);
+    _sites.add(saved);
+    notifyListeners();
+  }
+
+  Future<void> updateSite(Site site) async {
+    final repository = _repository;
+    if (repository == null) {
+      _replaceSite(site);
+      return;
+    }
+    _replaceSite(await repository.updateSite(site));
+  }
+
+  /// Saves the site's drawn plots. Its unit counts follow them.
+  Future<void> savePlots(Site site, List<Plot> plots) async {
+    final repository = _repository;
+    if (repository == null) {
+      _replaceSite(site.withPlots(plots));
+      return;
+    }
+    _replaceSite(await repository.savePlots(site.id, plots));
+  }
+
+  void _replaceSite(Site site) {
     final index = _sites.indexWhere((s) => s.id == site.id);
     if (index == -1) return;
     _ensureLocation(site.location);
@@ -223,8 +328,11 @@ class SiteController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Removes the site; its location stays, even with no sites left.
-  void deleteSite(String id) {
+  /// Removes the site; its location stays, even with no sites left. The
+  /// server refuses if the site has bookings.
+  Future<void> deleteSite(String id) async {
+    final repository = _repository;
+    if (repository != null) await repository.deleteSite(id);
     _sites.removeWhere((s) => s.id == id);
     notifyListeners();
   }

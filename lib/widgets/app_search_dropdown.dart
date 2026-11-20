@@ -173,13 +173,13 @@ class _AppSearchDropdownState extends State<AppSearchDropdown> {
           prefixIcon: widget.prefixIcon == null
               ? null
               : IconTheme(
-                  data: const IconThemeData(color: AppColors.textSecondaryLight, size: 20),
+                  data: IconThemeData(color: AppColors.textSecondaryLight, size: 20),
                   child: widget.prefixIcon!,
                 ),
           suffixIcon: AnimatedRotation(
             turns: _isOpen ? 0.5 : 0,
             duration: const Duration(milliseconds: 180),
-            child: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondaryLight),
+            child: Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondaryLight),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           enabledBorder: OutlineInputBorder(
@@ -188,7 +188,7 @@ class _AppSearchDropdownState extends State<AppSearchDropdown> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: AppColors.lightBorderFocused, width: 1.8),
+            borderSide: BorderSide(color: AppColors.lightBorderFocused, width: 1.8),
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
@@ -332,12 +332,12 @@ class _SearchPanelState extends State<_SearchPanel> {
             decoration: InputDecoration(
               hintText: widget.searchHint,
               hintStyle: AppTypography.bodyMedium.copyWith(color: AppColors.textMutedLight),
-              prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textMutedLight),
+              prefixIcon: Icon(Icons.search_rounded, size: 20, color: AppColors.textMutedLight),
               suffixIcon: query.isEmpty
                   ? null
                   : IconButton(
                       tooltip: 'Clear',
-                      icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textMutedLight),
+                      icon: Icon(Icons.close_rounded, size: 18, color: AppColors.textMutedLight),
                       onPressed: () => setState(_search.clear),
                     ),
               isDense: true,
@@ -351,7 +351,7 @@ class _SearchPanelState extends State<_SearchPanel> {
             ),
           ),
         ),
-        const Divider(height: 1, color: AppColors.lightBorder),
+        Divider(height: 1, color: AppColors.lightBorder),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -428,7 +428,7 @@ class _OptionTile extends StatelessWidget {
                   ),
                 ),
               ),
-              if (selected) const Icon(Icons.check_rounded, size: 18, color: AppColors.primary),
+              if (selected) Icon(Icons.check_rounded, size: 18, color: AppColors.primary),
             ],
           ),
         ),

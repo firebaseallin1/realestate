@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/utils/money_text.dart';
@@ -17,30 +18,33 @@ Color siteStatusColor(SiteStatus status) {
   }
 }
 
-/// Cover gradient for each site type, all within the sage family.
+/// Cover gradient for each site type, all within the chosen theme's colours.
 LinearGradient siteTypeGradient(SiteType type) {
   switch (type) {
     case SiteType.plots:
-      return const LinearGradient(
+      return LinearGradient(
         colors: [AppColors.brandDeep, AppColors.sage],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
     case SiteType.apartments:
-      return const LinearGradient(
-        colors: [AppColors.sage, Color(0xFF7A9573)],
+      return LinearGradient(
+        colors: [AppColors.sage, Color.lerp(AppColors.sage, AppColors.sageMid, 0.6)!],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
     case SiteType.villas:
-      return const LinearGradient(
-        colors: [Color(0xFF52684D), Color(0xFF6E8F7A)],
+      return LinearGradient(
+        colors: [
+          Color.lerp(AppColors.brandDeep, AppColors.sage, 0.5)!,
+          Color.lerp(AppColors.sage, AppColors.sageMid, 0.4)!,
+        ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
     case SiteType.commercial:
-      return const LinearGradient(
-        colors: [Color(0xFF3B4A38), AppColors.brandSurface],
+      return LinearGradient(
+        colors: [Color.lerp(AppColors.brandDeep, Colors.black, 0.2)!, AppColors.brandSurface],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
@@ -65,9 +69,9 @@ class SiteCard extends StatelessWidget {
     required this.onOpenLayout,
   });
 
-  static const Color soldColor = AppColors.primary;
+  static Color get soldColor => AppColors.primary;
   static const Color bookedColor = AppColors.accentGold;
-  static const Color availableColor = AppColors.sageSoft;
+  static Color get availableColor => AppColors.sageSoft;
 
   static String _area(double area) => MoneyText.grouped(area);
 
@@ -80,11 +84,7 @@ class SiteCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.lightBorder),
         boxShadow: [
-          BoxShadow(
-            color: AppColors.brandDark.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
+          BoxShadow(color: AppColors.brandDark.withValues(alpha: 0.04), blurRadius: 16, offset: const Offset(0, 6)),
         ],
       ),
       child: Column(
@@ -108,7 +108,7 @@ class SiteCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    const Icon(Icons.location_on_outlined, size: 15, color: AppColors.textMutedLight),
+                    Icon(Icons.location_on_outlined, size: 15, color: AppColors.textMutedLight),
                     const SizedBox(width: 3),
                     Flexible(
                       child: Text(
@@ -124,7 +124,7 @@ class SiteCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      const Icon(Icons.person_outline_rounded, size: 15, color: AppColors.textMutedLight),
+                      Icon(Icons.person_outline_rounded, size: 15, color: AppColors.textMutedLight),
                       const SizedBox(width: 3),
                       Flexible(
                         child: Text(
@@ -147,8 +147,10 @@ class SiteCard extends StatelessWidget {
                       _Tag(icon: Icons.landscape_outlined, label: 'Total ${_area(site.totalArea)} sq yd'),
                       if (site.salesArea > 0) _Tag(icon: Icons.sell_outlined, label: 'Sales ${_area(site.salesArea)}'),
                       if (site.roadArea > 0) _Tag(icon: Icons.add_road_rounded, label: 'Road ${_area(site.roadArea)}'),
-                      if (site.gardenArea > 0) _Tag(icon: Icons.park_outlined, label: 'Garden ${_area(site.gardenArea)}'),
-                      if (site.otherArea > 0) _Tag(icon: Icons.category_outlined, label: 'Other ${_area(site.otherArea)}'),
+                      if (site.gardenArea > 0)
+                        _Tag(icon: Icons.park_outlined, label: 'Garden ${_area(site.gardenArea)}'),
+                      if (site.otherArea > 0)
+                        _Tag(icon: Icons.category_outlined, label: 'Other ${_area(site.otherArea)}'),
                     ],
                   ),
                 ],
@@ -165,15 +167,13 @@ class SiteCard extends StatelessWidget {
                           label: '${site.plots.length} plots mapped',
                           onTap: onOpenLayout,
                         ),
-                      if (site.siteMap != null)
-                        _Tag(icon: Icons.map_outlined, label: 'Site map', onTap: onOpenLayout),
-                      if (site.brochure != null)
-                        const _Tag(icon: Icons.menu_book_outlined, label: 'Brochure'),
+                      if (site.siteMap != null) _Tag(icon: Icons.map_outlined, label: 'Site map', onTap: onOpenLayout),
+                      if (site.brochure != null) const _Tag(icon: Icons.menu_book_outlined, label: 'Brochure'),
                     ],
                   ),
                 ],
                 const SizedBox(height: 10),
-                const Divider(height: 1, color: AppColors.lightBorder),
+                Divider(height: 1, color: AppColors.lightBorder),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -229,10 +229,7 @@ class SiteCard extends StatelessWidget {
             top: 14,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.pureWhite,
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: BoxDecoration(color: AppColors.pureWhite, borderRadius: BorderRadius.circular(20)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -264,10 +261,7 @@ class SiteCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   '${site.type.label} • ${site.totalUnits} units',
-                  style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.pureWhite,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: AppTypography.bodySmall.copyWith(color: AppColors.pureWhite, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -322,7 +316,7 @@ class SiteActionsMenu extends StatelessWidget {
             onDelete();
         }
       },
-      itemBuilder: (context) => const [
+      itemBuilder: (context) => [
         PopupMenuItem(
           value: 'layout',
           child: Row(
@@ -383,10 +377,7 @@ class _Tag extends StatelessWidget {
               const SizedBox(width: 5),
               Text(
                 label,
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppTypography.caption.copyWith(color: AppColors.primary, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -401,11 +392,7 @@ class _Figure extends StatelessWidget {
   final int value;
   final Color color;
 
-  const _Figure({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+  const _Figure({required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -415,10 +402,7 @@ class _Figure extends StatelessWidget {
         children: [
           Text(
             '$value',
-            style: AppTypography.titleMedium.copyWith(
-              color: AppColors.textPrimaryLight,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTypography.titleMedium.copyWith(color: AppColors.textPrimaryLight, fontWeight: FontWeight.w700),
           ),
           Row(
             children: [

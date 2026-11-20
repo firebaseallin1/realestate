@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:real_estate/core/api/api_client.dart';
 import 'package:real_estate/core/controllers/booking_controller.dart';
 import 'package:real_estate/core/controllers/site_controller.dart';
 import 'package:real_estate/core/controllers/user_controller.dart';
@@ -188,6 +189,10 @@ void main() {
       expect(booking.status, BookingStatus.pending);
       expect(setup.sites.siteById('s7')!.bookedUnits, s7Booked + 1);
 
+      // Payments start once the Admin approves.
+      await setup.bookings.approve(booking.id);
+      await tester.pumpAndSettle();
+
       // Open it and record a payment against the plot value.
       await _tap(tester, find.byKey(ValueKey('booking-${booking.id}')));
       expect(find.byType(BookingDetailScreen), findsOneWidget);
@@ -209,6 +214,62 @@ void main() {
       expect(updated.balance, 4000000);
       expect(find.text('Payment History'), findsOneWidget);
       expect(find.text('₹5,00,000'), findsWidgets);
+    }
+  });
+
+  testWidgets('Changing the type clears payments; part of the own share is paid at booking', (tester) async {
+    for (final size in [desktop, phone]) {
+      final setup = await _pump(tester, size, 'sales');
+      await _openMenu(tester, 'propertyBooking');
+      await tester.tap(size == phone ? find.byType(FloatingActionButton) : find.text('New Booking'));
+      await tester.pumpAndSettle();
+
+      await _tap(tester, find.byKey(const ValueKey('booking-site')));
+      await tester.tap(find.text('Kaira River Front Plots').last);
+      await tester.pumpAndSettle();
+      await _type(tester, 'booking-plot-number', '31');
+      await _type(tester, 'customer-name', 'Ravi Teja');
+      await _type(tester, 'customer-mobile', '9876543210');
+
+      // Filled in, then the type changes: the payment details start again.
+      await _tap(tester, find.byKey(const ValueKey('type-withConstruction')));
+      await _type(tester, 'plot-value', '700000');
+      await _tap(tester, find.byKey(const ValueKey('plot-mode-loan')));
+      await _type(tester, 'construction-value', '2000000');
+      await _tap(tester, find.byKey(const ValueKey('type-withoutConstruction')));
+      expect(find.byKey(const ValueKey('construction-value')), findsNothing);
+      expect(find.byKey(const ValueKey('plot-loan-bank')), findsNothing);
+      final plotValue = find.descendant(of: find.byKey(const ValueKey('plot-value')), matching: find.byType(TextFormField));
+      expect(tester.widget<TextFormField>(plotValue).controller!.text, isEmpty);
+
+      // Plot ₹6,50,000 on a ₹5,00,000 loan: the customer's share is ₹1,50,000.
+      await _type(tester, 'plot-value', '650000');
+      await _tap(tester, find.byKey(const ValueKey('plot-mode-loan')));
+      await _type(tester, 'plot-loan-bank', 'HDFC');
+      await _type(tester, 'plot-loan-amount', '500000');
+      await _type(tester, 'plot-paid-now', '200000');
+      await _tap(tester, find.byKey(const ValueKey('booking-submit')));
+      expect(find.text("More than the customer's share (₹1,50,000)."), findsOneWidget);
+
+      await _type(tester, 'plot-paid-now', '50000');
+      expect(find.text('Still to pay ₹1,00,000', findRichText: true), findsOneWidget);
+      await _tap(tester, find.byKey(const ValueKey('plot-paid-method')));
+      await tester.tap(find.text('UPI').last);
+      await tester.pumpAndSettle();
+      await _type(tester, 'plot-paid-reference', 'UTR778');
+      await _tap(tester, find.byKey(const ValueKey('booking-submit')));
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      final booking = setup.bookings.bookings.firstWhere((b) => b.customer.name == 'Ravi Teja');
+      expect(booking.type, BookingType.withoutConstruction);
+      expect(booking.plan(PaymentPart.plot)!.loan!.amount, 500000);
+      expect(booking.payments, hasLength(1));
+      expect(booking.payments.single.amount, 50000);
+      expect(booking.payments.single.method, PaymentMethod.upi);
+      expect(booking.payments.single.reference, 'UTR778');
+      expect(booking.balance, 600000);
+      expect(booking.toCreateJson()['initialPayments'], hasLength(1));
     }
   });
 
@@ -261,5 +322,169 @@ void main() {
     await _tap(tester, find.byKey(const ValueKey('detail-approve')));
     expect(setup.bookings.bookingById('b2')!.status, BookingStatus.approved);
     expect(find.byKey(const ValueKey('detail-approve')), findsNothing);
+  });
+
+  testWidgets('Loan disbursements move the loan status; it can be marked before then', (tester) async {
+    final setup = await _pump(tester, desktop, 'sales');
+    await setup.bookings.approve('b2');
+    await _openMenu(tester, 'propertyBooking');
+    await _tap(tester, find.byKey(const ValueKey('booking-b2')));
+
+    // The construction loan is Applied; mark it Sanctioned.
+    expect(find.byKey(const ValueKey('loan-status-construction')), findsOneWidget);
+    await _tap(tester, find.byKey(const ValueKey('loan-status-menu-construction')));
+    await tester.tap(find.text('Sanctioned').last);
+    await tester.pumpAndSettle();
+    expect(setup.bookings.bookingById('b2')!.plan(PaymentPart.construction)!.loan!.status, LoanStatus.sanctioned);
+
+    Future<void> disburse(String amount) async {
+      await _tap(tester, find.byKey(const ValueKey('record-payment')));
+      await _type(tester, 'payment-amount', amount);
+      await _tap(tester, find.byKey(const ValueKey('payment-method-plot')));
+      await tester.tap(find.text('Loan Disbursement').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('loan-note')), findsOneWidget);
+      await _tap(tester, find.byKey(const ValueKey('payment-submit')));
+    }
+
+    // The SBI plot loan is ₹10,00,000: part of it, then more than is left.
+    await disburse('400000');
+    LoanDetails plotLoan() => setup.bookings.bookingById('b2')!.plan(PaymentPart.plot)!.loan!;
+    expect(plotLoan().status, LoanStatus.partlyDisbursed);
+    expect(find.text('Partly Disbursed'), findsOneWidget);
+
+    await disburse('700000');
+    expect(find.text('More than the balance of ₹6,00,000.'), findsOneWidget);
+    await _type(tester, 'payment-amount', '600000');
+    await _tap(tester, find.byKey(const ValueKey('payment-submit')));
+    expect(plotLoan().status, LoanStatus.disbursed);
+
+    // Disbursed: the status follows the payments, so no menu.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('loan-status-menu-plot')), findsNothing);
+    expect(setup.bookings.bookingById('b2')!.loanToComeFor(PaymentPart.plot), 0);
+  });
+
+  testWidgets('Only approved bookings can be edited, never below what is paid', (tester) async {
+    for (final size in [desktop, phone]) {
+      final setup = await _pump(tester, size, 'sales');
+      await _openMenu(tester, 'propertyBooking');
+
+      // Pending: no edit.
+      await _tap(tester, find.byKey(const ValueKey('booking-b2')));
+      expect(find.byKey(const ValueKey('detail-edit')), findsNothing);
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+
+      // Approved b1: ₹18,00,000 plot, ₹5,00,000 paid.
+      await _tap(tester, find.byKey(const ValueKey('booking-b1')));
+      await _tap(tester, find.byKey(const ValueKey('detail-edit')));
+      expect(find.text('Edit Booking'), findsWidgets);
+      expect(find.byKey(const ValueKey('booking-site')), findsNothing);
+      expect(find.byKey(const ValueKey('plot-paid-now')), findsNothing);
+
+      await _type(tester, 'customer-address', 'Madhapur, Hyderabad');
+      await _type(tester, 'plot-value', '400000');
+      await _tap(tester, find.byKey(const ValueKey('booking-submit')));
+      expect(find.text('₹5,00,000 is already paid; it cannot be less.'), findsOneWidget);
+
+      // A bank loan for part of it.
+      await _type(tester, 'plot-value', '1900000');
+      await _tap(tester, find.byKey(const ValueKey('plot-mode-loan')));
+      await _type(tester, 'plot-loan-bank', 'Axis Bank');
+      await _type(tester, 'plot-loan-amount', '1000000');
+      await _tap(tester, find.byKey(const ValueKey('booking-submit')));
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      final b1 = setup.bookings.bookingById('b1')!;
+      expect(b1.customer.address, 'Madhapur, Hyderabad');
+      expect(b1.customer.name, 'Ramesh Naidu');
+      expect(b1.plan(PaymentPart.plot)!.value, 1900000);
+      expect(b1.plan(PaymentPart.plot)!.loan!.bankName, 'Axis Bank');
+      expect(b1.payments, hasLength(1));
+      expect(find.text('Axis Bank'), findsOneWidget);
+    }
+  });
+
+  testWidgets('Sales sees approval status, and sends a rejected booking back for approval', (tester) async {
+    for (final size in [desktop, phone]) {
+      final setup = await _pump(tester, size, 'sales');
+      final s7 = setup.sites.siteById('s7')!;
+
+      // b2 waits for approval: the customers list says so.
+      await _openMenu(tester, 'customers');
+      expect(find.text('1 pending approval'), findsOneWidget);
+
+      // The Admin rejects it; Sales finds it with the status filter.
+      await setup.bookings.reject('b2');
+      await tester.pumpAndSettle();
+      expect(setup.sites.siteById('s7')!.bookedUnits, s7.bookedUnits - 1);
+      await _openMenu(tester, 'propertyBooking');
+      await _tap(tester, find.byKey(const ValueKey('booking-status-rejected')));
+      expect(find.byKey(const ValueKey('booking-b2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('booking-b1')), findsNothing);
+
+      // Rejected: no payments or plain edit, but edit & re-submit.
+      await _tap(tester, find.byKey(const ValueKey('booking-b2')));
+      expect(find.byKey(const ValueKey('record-payment')), findsNothing);
+      expect(find.byKey(const ValueKey('detail-edit')), findsNothing);
+      await _tap(tester, find.byKey(const ValueKey('detail-edit-resubmit')));
+      expect(find.text('Edit & Re-submit'), findsOneWidget);
+      await _type(tester, 'customer-address', 'Labbipet, Vijayawada');
+      await _tap(tester, find.byKey(const ValueKey('booking-submit')));
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      final b2 = setup.bookings.bookingById('b2')!;
+      expect(b2.status, BookingStatus.pending);
+      expect(b2.customer.address, 'Labbipet, Vijayawada');
+      expect(setup.sites.siteById('s7')!.bookedUnits, s7.bookedUnits);
+      expect(find.byKey(const ValueKey('detail-resubmit')), findsNothing);
+    }
+  });
+
+  test('A rejected booking cannot come back once its plot is taken', () async {
+    final sites = SiteController.test();
+    final bookings = BookingController(sites);
+    await bookings.reject('b2');
+    final b2 = bookings.bookingById('b2')!;
+    await bookings.addBooking(Booking(
+      id: 'n9',
+      siteId: b2.siteId,
+      siteName: b2.siteName,
+      plotNumber: b2.plotNumber,
+      customer: const Customer(name: 'Other', mobile: '9999999999'),
+      type: BookingType.withoutConstruction,
+      plans: const [PaymentPlan(part: PaymentPart.plot, value: 100, mode: PaymentMode.fullPayment)],
+      bookedOn: DateTime(2026, 11, 1),
+      bookedBy: 'Tester',
+    ));
+    await expectLater(bookings.resubmit(b2), throwsA(isA<ApiException>()));
+    expect(bookings.bookingById('b2')!.status, BookingStatus.rejected);
+  });
+
+  testWidgets('A booking waiting for approval is read-only for Sales', (tester) async {
+    final setup = await _pump(tester, desktop, 'sales');
+
+    // In the customers list the pending plot does not open.
+    await _openMenu(tester, 'customers');
+    await tester.tap(find.byKey(const ValueKey('customer-row-b2')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BookingDetailScreen), findsNothing);
+
+    // Its details offer no payment, edit or loan change.
+    await _openMenu(tester, 'propertyBooking');
+    await _tap(tester, find.byKey(const ValueKey('booking-b2')));
+    expect(find.byKey(const ValueKey('record-payment')), findsNothing);
+    expect(find.byKey(const ValueKey('detail-edit')), findsNothing);
+    expect(find.byKey(const ValueKey('loan-status-menu-plot')), findsNothing);
+
+    // Once approved, payments and edits open up.
+    await setup.bookings.approve('b2');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('record-payment')), findsOneWidget);
+    expect(find.byKey(const ValueKey('detail-edit')), findsOneWidget);
   });
 }

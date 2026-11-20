@@ -36,7 +36,7 @@ class TopSitesList extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < sites.length; i++) ...[
-            if (i > 0) const Divider(height: 14, color: AppColors.lightBorder),
+            if (i > 0) Divider(height: 14, color: AppColors.lightBorder),
             Row(
               children: [
                 Container(

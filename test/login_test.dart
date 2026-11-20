@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:real_estate/core/controllers/auth_controller.dart';
-import 'package:real_estate/core/controllers/user_controller.dart';
+import 'package:real_estate/core/repositories/local_user_repository.dart';
 import 'package:real_estate/models/app_user.dart';
 import 'package:real_estate/screens/auth/login_screen.dart';
 import 'package:real_estate/screens/auth/views/login_mobile_view.dart';
@@ -40,7 +40,7 @@ void main() {
   });
 
   test('Sign-in returns the account with its role, and rejects wrong details', () async {
-    final auth = AuthController(users: UserController.test());
+    final auth = AuthController(repository: LocalUserRepository());
 
     final roles = {
       'admin': UserRole.admin,
@@ -49,12 +49,12 @@ void main() {
       'incharge': UserRole.siteIncharge,
     };
     for (final entry in roles.entries) {
-      final user = await auth.login(username: entry.key, password: UserController.demoPassword);
+      final user = await auth.login(username: entry.key, password: LocalUserRepository.demoPassword);
       expect(user?.role, entry.value);
     }
 
     expect(await auth.login(username: 'admin', password: 'wrong-pass'), isNull);
     expect(auth.errorMessage, 'Incorrect username or password.');
-    expect(await auth.login(username: 'nobody', password: UserController.demoPassword), isNull);
+    expect(await auth.login(username: 'nobody', password: LocalUserRepository.demoPassword), isNull);
   });
 }

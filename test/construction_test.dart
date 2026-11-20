@@ -4,6 +4,8 @@ import 'package:real_estate/core/controllers/booking_controller.dart';
 import 'package:real_estate/core/controllers/construction_controller.dart';
 import 'package:real_estate/core/controllers/site_controller.dart';
 import 'package:real_estate/core/controllers/user_controller.dart';
+import 'package:real_estate/core/repositories/local_user_repository.dart';
+import 'package:real_estate/models/app_user.dart';
 import 'package:real_estate/models/booking.dart';
 import 'package:real_estate/models/construction.dart';
 import 'package:real_estate/screens/construction/construction_screen.dart';
@@ -140,7 +142,7 @@ void main() {
     });
   });
 
-  testWidgets('Site Incharge adds a daily update, pays wages and records material', (tester) async {
+  testWidgets('Site Incharge adds a daily update and records material', (tester) async {
     for (final size in [desktop, phone]) {
       final s = await _pump(tester, size, 'incharge');
 
@@ -162,18 +164,12 @@ void main() {
       expect(project.wagesEarned('w4'), 1600);
       await _clearSnackBar(tester);
 
-      // Pay Raju the ₹900 due (amount is prefilled).
+      // Payments are a separate process: no pay buttons here.
       await _tap(tester, find.byKey(const ValueKey('tab-workers')));
-      await _tap(tester, find.byKey(const ValueKey('pay-worker-w1')));
-      await _type(tester, 'expense-amount', '5000');
-      await _tap(tester, find.byKey(const ValueKey('expense-submit')));
-      expect(find.text('More than the ₹900 due.'), findsOneWidget);
-      await _type(tester, 'expense-amount', '900');
-      await _tap(tester, find.byKey(const ValueKey('expense-submit')));
-      expect(project.wagesDue('w1'), 0);
-      await _clearSnackBar(tester);
+      expect(find.byKey(const ValueKey('worker-w1')), findsOneWidget);
+      expect(find.text('Pay Wages'), findsNothing);
 
-      // New material, then pay its bill.
+      // New material; the same material again adds to it at the new rate.
       await _tap(tester, find.byKey(const ValueKey('tab-materials')));
       await _tap(tester, find.byKey(const ValueKey('construction-action')));
       await _type(tester, 'material-name', 'Jelly 20mm');
@@ -185,15 +181,25 @@ void main() {
       expect(jelly.amount, 28000);
       await _clearSnackBar(tester);
 
-      await _tap(tester, find.byKey(ValueKey('pay-material-${jelly.id}')));
-      await _tap(tester, find.byKey(const ValueKey('expense-submit')));
-      expect(project.materialDue(jelly.id), 0);
+      expect(find.text('Pay Bill'), findsNothing);
+
+      await _tap(tester, find.byKey(const ValueKey('construction-action')));
+      await _type(tester, 'material-name', ' jelly  20MM ');
+      await _type(tester, 'material-quantity', '2');
+      await _type(tester, 'material-rate', '7500');
+      await _tap(tester, find.byKey(const ValueKey('material-submit')));
+      final more = project.materialById(jelly.id)!;
+      expect(more.quantity, 6);
+      expect(more.rate, 7500);
+      expect(more.amount, 45000);
+      expect(more.receipts.map((r) => r.quantity), [4, 2]);
+      expect(project.materials.where((m) => m.key == jelly.key).length, 1);
+      expect(find.text('Received 2 times'), findsOneWidget);
       await _clearSnackBar(tester);
 
       // Expenses tab totals.
       await _tap(tester, find.byKey(const ValueKey('tab-expenses')));
       expect(find.text('Cost Breakdown'), findsOneWidget);
-      expect(find.text('Jelly 20mm'), findsOneWidget);
     }
   });
 
@@ -221,6 +227,35 @@ void main() {
       expect(project.currentStage!.name, 'Roof Slab');
       expect(find.text('33%'), findsWidgets);
     }
+  });
+
+  testWidgets('A Site Incharge sees their own name, without being able to list the team', (tester) async {
+    final bookings = BookingController(SiteController.test());
+    final construction = ConstructionController(bookings);
+    const incharge = AppUser(id: 'u4', name: 'Suresh Reddy', username: 'incharge', role: UserRole.siteIncharge);
+
+    tester.view.physicalSize = desktop;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        onGenerateRoute: (settings) => MaterialPageRoute(
+          settings: const RouteSettings(arguments: incharge),
+          builder: (_) => DashboardScreen(
+            // As on the server: no accounts are available to this role.
+            userController: UserController(LocalUserRepository()),
+            bookingController: bookings,
+            constructionController: construction,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _openMenu(tester, 'dailyConstruction');
+    expect(find.byKey(const ValueKey('project-b3')), findsOneWidget);
+    expect(find.text('Site Incharge: Suresh Reddy'), findsOneWidget);
+    expect(find.text('No Site Incharge assigned'), findsNothing);
   });
 
   testWidgets('Progress monitoring totals and incharge without projects', (tester) async {

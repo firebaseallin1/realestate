@@ -1,66 +1,72 @@
 import 'package:flutter/material.dart';
 
+import 'app_palette.dart';
+
 /// AppColors defines the central color palette for the Real Estate application.
-/// A calm sage green & white aesthetic built on four palette tones:
-/// #5C7057 (sage), #89A482 (mid sage), #ACC5A6 (soft sage), #D1EDD3 (mint).
+///
+/// Brand colours come from the theme an Admin picks ([AppPalette]). They are
+/// getters, so widgets pick up a new theme the next time they build. White,
+/// gold and the status colours are the same in every theme.
 class AppColors {
   AppColors._();
 
-  // --- Sage Palette (source tones) ---
-  static const Color sage = Color(0xFF5C7057);             // Deep sage — main brand color
-  static const Color sageMid = Color(0xFF89A482);          // Mid sage
-  static const Color sageSoft = Color(0xFFACC5A6);         // Soft sage
-  static const Color mint = Color(0xFFD1EDD3);             // Pale mint
+  static AppPalette get _p => AppPalette.current;
 
-  // --- Signature Sage & White Core ---
+  // --- Brand palette (named after the original sage theme) ---
+  static Color get sage => _p.primary; // Main brand color
+  static Color get sageMid => _p.mid;
+  static Color get sageSoft => _p.soft;
+  static Color get mint => _p.pale; // Palest brand tint
+
+  // --- White Core ---
   static const Color pureWhite = Color(0xFFFFFFFF);
-  static const Color offWhite = Color(0xFFF5F9F4);         // White with a hint of mint
+  static Color get offWhite => _p.offWhite; // White with a hint of the brand
   static const Color whiteSurface = Color(0xFFFFFFFF);
-  static const Color whiteBorder = Color(0xFFE0EADD);
+  static Color get whiteBorder => _p.border;
 
   // --- Brand Shades (backgrounds, panels, buttons with white text) ---
-  static const Color brandDark = sage;                       // Main brand fill
-  static const Color brandDeep = Color(0xFF4A5C46);          // Deeper sage for gradients
-  static const Color brandSurface = Color(0xFF677D62);       // Elevated sage surface
-  static const Color brandCard = Color(0xFF738B6D);          // Card background in dark mode
-  static const Color brandBorder = sageMid;                  // Sage border
-  static const Color brandBorderLight = Color(0x33FFFFFF);   // Translucent white on sage
+  static Color get brandDark => _p.primary;
+  static Color get brandDeep => _p.deep;
+  static Color get brandSurface => _p.surface;
+  static Color get brandCard => _p.card;
+  static Color get brandBorder => _p.mid;
+  static const Color brandBorderLight = Color(0x33FFFFFF); // Translucent white on brand
 
   // --- Theme Aliases (for seamless system compatibility) ---
-  static const Color darkBackground = brandDark;
-  static const Color darkSurface = brandSurface;
-  static const Color darkSurfaceVariant = brandCard;
-  static const Color darkCard = brandCard;
+  static Color get darkBackground => brandDark;
+  static Color get darkSurface => brandSurface;
+  static Color get darkSurfaceVariant => brandCard;
+  static Color get darkCard => brandCard;
   static const Color darkBorder = brandBorderLight;
   static const Color darkBorderFocused = pureWhite;
 
   static const Color lightBackground = pureWhite;
   static const Color lightSurface = pureWhite;
-  static const Color lightSurfaceVariant = offWhite;
+  static Color get lightSurfaceVariant => offWhite;
   static const Color lightCard = pureWhite;
-  static const Color lightBorder = whiteBorder;
-  static const Color lightBorderFocused = brandDark;
+  static Color get lightBorder => whiteBorder;
+  static Color get lightBorderFocused => brandDark;
 
   // --- Primary Brand Colors ---
-  static const Color primary = sage;                       // Readable on white
-  static const Color primaryBright = sageMid;              // Icons, bars, decoration
-  static const Color primaryLight = sageSoft;              // Soft fills, glows, cursor
-  static const Color primaryGlow = Color(0x405C7057);      // Subtle sage shadow
+  static Color get primary => _p.primary; // Readable on white
+  static Color get primaryBright => _p.mid; // Icons, bars, decoration
+  static Color get primaryLight => _p.soft; // Soft fills, glows, cursor
+  static Color get primaryGlow => _p.primary.withValues(alpha: 0.25); // Subtle shadow
 
   // --- Accent & Feature Colors ---
-  static const Color accentGold = Color(0xFFD4A24C);       // Warm earthy gold
+  static const Color accentGold = Color(0xFFD4A24C); // Warm earthy gold
   static const Color accentGoldLight = Color(0xFFE9C46A);
 
-  // --- Typography: On Sage (White & Mint) ---
-  static const Color textPrimaryDark = Color(0xFFFFFFFF);   // Pure crisp white
-  static const Color textSecondaryDark = Color(0xFFEEF6EC); // Soft mint white
-  static const Color textMutedDark = mint;                  // Pale mint
-  static const Color textDisabledDark = sageSoft;
+  // --- Typography: On Brand (White & Pale) ---
+  static const Color textPrimaryDark = Color(0xFFFFFFFF);
+  static Color get textSecondaryDark => Color.lerp(pureWhite, _p.pale, 0.4)!;
+  static Color get textMutedDark => _p.pale;
+  static Color get textDisabledDark => _p.soft;
 
-  // --- Typography: On White (Deep Green-Grey) ---
-  static const Color textPrimaryLight = Color(0xFF2E3A2B);  // Deep green-grey text
-  static const Color textSecondaryLight = Color(0xFF52604E); // Muted green-grey
-  static const Color textMutedLight = Color(0xFF8A9786);
+  // --- Typography: On White ---
+  static Color get textPrimaryLight => _p.text;
+  static Color get textSecondaryLight => _p.textSecondary;
+  static Color get textMutedLight => _p.textMuted;
 
   // --- Status & Feedback Colors ---
   static const Color success = Color(0xFF3F8F5A);
@@ -71,40 +77,25 @@ class AppColors {
   static const Color warningBg = Color(0x1AD4A24C);
   static const Color info = Color(0xFF6B9AA8);
 
-  // --- Gradients (Sage and White harmony) ---
-  /// Deep sage gradient — safe under white text (buttons, banners, panels).
-  static const LinearGradient brandGradient = LinearGradient(
-    colors: [brandDeep, sage],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  // --- Gradients ---
+  /// Deep brand gradient — safe under white text (buttons, banners, panels).
+  static LinearGradient get brandGradient =>
+      LinearGradient(colors: [brandDeep, sage], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
-  /// Sage to mid sage — decorative fills and logo tiles.
-  static const LinearGradient brandSoftGradient = LinearGradient(
-    colors: [sage, sageMid],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  /// Brand to mid brand — decorative fills and logo tiles.
+  static LinearGradient get brandSoftGradient =>
+      LinearGradient(colors: [sage, sageMid], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
-  static const LinearGradient primaryGradient = brandSoftGradient;
+  static LinearGradient get primaryGradient => brandSoftGradient;
 
-  static const LinearGradient cardDarkGradient = LinearGradient(
-    colors: [brandSurface, brandDark],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  static LinearGradient get cardDarkGradient =>
+      LinearGradient(colors: [brandSurface, brandDark], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
-  static const LinearGradient darkCardGradient = cardDarkGradient;
+  static LinearGradient get darkCardGradient => cardDarkGradient;
 
-  static const LinearGradient whiteCardGradient = LinearGradient(
-    colors: [pureWhite, offWhite],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  static LinearGradient get whiteCardGradient =>
+      LinearGradient(colors: [pureWhite, offWhite], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
-  static const LinearGradient splashGradient = LinearGradient(
-    colors: [brandDark, brandDeep],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
+  static LinearGradient get splashGradient =>
+      LinearGradient(colors: [brandDark, brandDeep], begin: Alignment.topCenter, end: Alignment.bottomCenter);
 }

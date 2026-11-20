@@ -1,7 +1,15 @@
 # Kaira Properties: Backend Design
 
-Status: **draft for review**. No server code exists yet. This is built from the app's
-current models and controllers in `lib/`.
+Status: **in use**. Built and connected to the app: login, users, locations, sites, plots, bookings,
+payments, construction and files (build order steps 1 to 6). Differences from the original plan:
+
+- A site stores its location's name, with `locations` keeping the list. The app shows no rename.
+- Reports and dashboard totals are worked out in the app from the data it loads, and customers by
+  grouping bookings, so there are no separate endpoints for them.
+- Lists load in full rather than by page, which suits today's volumes. Add paging if they grow.
+- A project is addressed by its booking's ID, and every change answers with the whole project.
+- Files download through `GET /files/:id/content` for signed-in staff, not signed links.
+- Local-folder storage is in use until an S3 or R2 account exists.
 
 ## 1. Architecture
 
@@ -14,11 +22,11 @@ Flutter app (web + mobile)  →  NestJS API (/api/v1)  →  MongoDB
 - The backend lives in `backend/` in this repository, so app and API changes stay together.
 - The connection string lives only in `backend/.env`, which Git ignores. It is never put in
   the Flutter app or committed.
-- Assumptions, to be corrected if wrong: **one company** (Kaira only) and **online only**
-  (no offline entry).
+- Decided: **one company** (Kaira only) and **online only** (no offline entry).
 
-**Requirement to confirm:** the design relies on MongoDB transactions, which need a replica
-set. MongoDB Atlas provides this on every tier. A plain single-server install does not.
+**Requirement:** the design relies on MongoDB transactions, which need a replica set. MongoDB
+Atlas provides this on every tier; a plain single-server install does not. The server checks at
+startup and `GET /health` reports it as `transactions`.
 
 ## 2. Conventions
 
@@ -38,7 +46,7 @@ set. MongoDB Atlas provides this on every tier. A plain single-server install do
 The app's plain `password` field goes away. Removing a user sets `active: false`, because
 bookings and work updates still refer to them.
 
-**locations**: `name (unique, case-insensitive)`
+**locations**: `name (unique, case-insensitive), latitude?, longitude?` (map point, both or neither)
 
 **sites**: `name, locationId, type, status, totalUnits, soldUnits, bookedUnits, ownerName,
 totalArea, salesArea, roadArea, gardenArea, otherArea, siteMapFileId, brochureFileId`
@@ -62,19 +70,37 @@ Opened automatically when a With Construction booking is approved.
 
 **dailyWork**: `projectId, date, stageId, description, workerIds[], updatedById, updatedByName`
 
-**materialBills**: `projectId, fileId, supplier, billNumber, date`
+**materialBills**: `projectId, fileId, fileSha256, supplier, billNumber, date`
+The same file, or the same bill number from the same supplier, is refused as `DUPLICATE_BILL`
+unless `allowDuplicate` is sent.
 
-**materials**: `projectId, billId?, date, name, quantity, unit, ratePaise, amountPaise, supplier`
+**materials**: `projectId, billId?, date, name, quantity, unit, ratePaise, amountPaise, supplier,
+history [{date, quantity, ratePaise, supplier, billId?, billNumber, addedAt}]`
+The same material (name and unit, ignoring case and spaces) received again adds to `quantity`,
+takes the new rate, and adds a `history` entry.
 
 **expensePayments**: `projectId, kind (worker | material), targetId, amountPaise, date, method,
 reference, createdBy`
 
-**files**: `storageKey, name, contentType, size, uploadedBy`
+**files**: `storageKey, name, contentType, size, uploadedBy, sha256`
+
+**leads**: `name, mobile, mobileKey (last 10 digits), email, area, source, siteId?, siteName,
+interest?, budgetPaise?, notes, status, nextFollowUp?, ownerId, ownerName, followUps [{date, mode,
+note, status, nextDate?, byId, byName, addedAt}]`
+One lead per mobile number (`DUPLICATE_LEAD`). A follow-up sets the lead's status and next date;
+Won and Lost clear the next date. Sales Executives see their own leads; Admins see all.
+`customerId?, convertedAt?` are set when the lead is converted.
+
+**customers**: `name, mobile, mobileKey (unique), alternateMobile, email, address, occupation, notes,
+leadId?, source?, ownerId, ownerName`
+Made by converting a lead (`POST /leads/:id/convert`), in one transaction with marking the lead Won.
+One customer per mobile number (`DUPLICATE_CUSTOMER`); a lead converts once (`ALREADY_CONVERTED`).
+The app matches customers with bookings on the mobile number.
 
 **refreshTokens**: `userId, tokenHash, expiresAt, revokedAt`
 
-Customers have no collection of their own in this version. As in the app today, they are worked out
-by grouping bookings on mobile number.
+Customers who have only bookings (never a lead) are still worked out by grouping bookings on mobile
+number.
 
 ## 4. Business rules the server must enforce
 
@@ -107,18 +133,20 @@ server checks every request. Admin can do everything.
 | Users | No | Read Site Incharges (to assign) | No |
 | Bookings: raise, read, record payments | Yes | No | No |
 | Bookings: approve / reject | No | No | No |
+| Leads and follow-ups | Own leads | No | No |
 | Projects: read all, assign incharge, update stages | No | Yes | No |
 | Projects assigned to them: daily work, workers, materials, bills, expense payments, stages | No | Yes | Yes, own projects only |
 
-**Please confirm the Site Manager row for workers, materials and payments.** The app lets a Site
-Manager open a project's tabs today, so this carries that over, but the menu groups those
-tasks under Site Incharge.
+Decided: a Site Manager keeps full access to workers, materials and payments, as the app allows
+today.
 
 ## 6. Login
 
 - `POST /auth/login` returns a 15-minute access token (JWT) and a 30-day refresh token.
 - Refresh tokens rotate on each use and are stored hashed, so a user can be signed out by revoking them.
-- Passwords are hashed with Argon2. Login attempts are rate limited.
+- Passwords are at least 8 characters and hashed with Argon2. Login attempts are limited to 10 a
+  minute per address.
+- Replaying a used refresh token ends that whole sign-in, as it may have been stolen.
 - There is no public sign-up. The first Admin comes from a one-time script; Admins create everyone else.
 - Removing a user revokes their tokens immediately.
 - The app keeps tokens in `flutter_secure_storage`.
@@ -128,7 +156,8 @@ tasks under Site Incharge.
 ```
 POST   /auth/login | /auth/refresh | /auth/logout      GET /auth/me
 GET    /users                POST /users               PATCH | DELETE /users/:id
-GET    /locations            POST /locations
+       (DELETE refuses Admins and yourself; PATCH cannot change your own role; username never changes)
+GET    /locations            POST /locations           PATCH /locations/:id (map point)
 GET    /sites                POST /sites               GET | PATCH | DELETE /sites/:id
 GET    /sites/:id/plots      PUT  /sites/:id/plots     PATCH /plots/:id
 GET    /bookings?status&type POST /bookings            GET /bookings/:id
@@ -140,6 +169,11 @@ PATCH  /projects/:id/stages/:stageId
 GET|POST /projects/:id/workers | /daily-work | /materials | /expense-payments
 PATCH  /projects/:id/materials/:materialId
 POST   /projects/:id/material-bills
+GET|PUT /settings/file-storage   POST /settings/file-storage/move   (Admin)
+GET /settings/theme (anyone, even signed out)   PUT /settings/theme (Admin): any of theme (sage|ocean|indigo|terracotta|graphite|plum), font (josefin|poppins|serif|system), textSize (small|normal|large|extraLarge)
+POST   /bills/read  (reads an uploaded bill with Claude; saves nothing)
+GET    /leads                POST /leads               PATCH /leads/:id
+POST   /leads/:id/follow-ups  POST /leads/:id/convert
 POST   /files                GET  /files/:id/url
 GET    /reports/dashboard | /reports/inventory | /reports/locations
 ```
@@ -149,11 +183,19 @@ Lists are paginated.
 
 ## 8. Files
 
-- Files go to private object storage (S3 or Cloudflare R2). MongoDB stores only their details.
+- Admins choose in Settings > File Storage where new uploads go: the database (default) or the
+  server folder (`UPLOAD_DIR`, which then needs a persistent disk). Each file is read from where it was
+  saved; "Move files" copies files into the chosen storage and deletes the old copies.
+- File bytes are stored in MongoDB with GridFS (bucket `fileBytes`), as binary chunks, not base64.
+  The server needs no disk of its own and database backups include the files. Files uploaded before
+  this are still read from the old `UPLOAD_DIR` folder. Object storage (S3, R2) can replace GridFS
+  later behind the same `StorageService`.
 - Downloads use short-lived signed links, because bills are private.
 - Limit: 20 MB; PDF, JPG, PNG and WebP only, checked by the server.
 - Storage sits behind one interface, so development can use a local folder until an account exists.
-- Bill reading stays on the device. Only the reviewed items and the original file are sent.
+- Bills are read by Claude (`claude-opus-5-5`) on the server when `ANTHROPIC_API_KEY` is set: scanned
+  and handwritten PDFs and photos, returned as items to review. The file goes to Anthropic for reading.
+  Without the key, bills are read on the device (text PDFs, and printed photos on phones).
 
 ## 9. Changes in the Flutter app
 
@@ -178,10 +220,12 @@ Lists are paginated.
 **Not in this version:** pages that are still "coming soon" in the app (Leads, Property Units,
 Customer Handover, Construction Planning, Inspection, Photos, Site Reports).
 
-## 11. Open questions
+## 11. Decisions
 
-1. Is the database MongoDB Atlas or a replica set? Transactions require one of them.
-2. Are one company and online-only correct?
-3. Should a Site Manager manage workers, materials and payments, or only view them? (Section 5)
-4. Should deleting a site be blocked once it has bookings? This design blocks it, which is a change: the app allows it today.
-5. Which file storage account will you use: S3, R2, or something else?
+- Deleting a site is blocked once it has bookings. This changes today's app, which allows it, and
+  is enforced when sites are connected (step 3).
+
+## 12. Open questions
+
+1. Does the database support transactions? `GET /health` answers this once it is connected.
+2. Which file storage account will you use: S3, R2, or something else? Needed by step 6.

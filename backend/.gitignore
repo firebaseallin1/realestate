@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+*.log
+*.tsbuildinfo
+
+# Secrets: the database connection string and JWT secret
+.env
+.env.*
+!.env.example
+
+# Uploaded bills, maps and brochures
+uploads/

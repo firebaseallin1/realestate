@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../../../core/controllers/user_controller.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
@@ -9,12 +11,13 @@ import '../../../widgets/list_table_switcher.dart';
 import '../widgets/report_table.dart';
 
 /// UsersSection (Admin): the team as cards or a table, filtered by role,
-/// with each member's role, username, phone and current work; others can
-/// be removed, the signed-in user cannot.
+/// with each member's role, username, phone and current work. Everyone can
+/// be edited; others can be removed, except Admins and the signed-in user.
 class UsersSection extends StatefulWidget {
   final UserController controller;
   final String currentUserId;
   final ValueChanged<AppUser> onRemoveUser;
+  final ValueChanged<AppUser>? onEditUser;
 
   /// A short line about each person's work, e.g. "3 bookings raised".
   final String Function(AppUser user)? activityFor;
@@ -24,6 +27,7 @@ class UsersSection extends StatefulWidget {
     required this.controller,
     required this.currentUserId,
     required this.onRemoveUser,
+    this.onEditUser,
     this.activityFor,
   });
 
@@ -42,6 +46,36 @@ class _UsersSectionState extends State<UsersSection> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final users = controller.usersWithRole(_role);
+
+    if (controller.users.isEmpty) {
+      if (controller.isLoading) {
+        return Padding(
+          padding: EdgeInsets.symmetric(vertical: 60),
+          child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        );
+      }
+      if (controller.loadError != null) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Column(
+            children: [
+              Text(
+                controller.loadError!,
+                textAlign: TextAlign.center,
+                style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondaryLight),
+              ),
+              const SizedBox(height: 10),
+              TextButton.icon(
+                key: const ValueKey('users-retry'),
+                onPressed: controller.load,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Try Again'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -101,7 +135,7 @@ class _UsersSectionState extends State<UsersSection> {
                         user: user,
                         isYou: user.id == widget.currentUserId,
                         activity: widget.activityFor?.call(user),
-                        onRemove: () => widget.onRemoveUser(user),
+                        menu: _menuFor(user, AppColors.pureWhite),
                       ),
                     ),
                 ],
@@ -127,14 +161,7 @@ class _UsersSectionState extends State<UsersSection> {
                   ReportTable.pill(user.role.label, user.role.color),
                   ReportTable.text(user.phone.isEmpty ? ReportTable.blank : user.phone),
                   ReportTable.text(widget.activityFor?.call(user) ?? ReportTable.blank),
-                  if (user.id == widget.currentUserId)
-                    const SizedBox.shrink()
-                  else
-                    _UserMenu(
-                      username: user.username,
-                      iconColor: AppColors.textSecondaryLight,
-                      onRemove: () => widget.onRemoveUser(user),
-                    ),
+                  _menuFor(user, AppColors.textSecondaryLight) ?? const SizedBox.shrink(),
                 ],
             ],
           ),
@@ -144,13 +171,15 @@ class _UsersSectionState extends State<UsersSection> {
   }
 }
 
-/// The "Remove user" menu, on a card's band or at the end of a table row.
+/// The "Edit user" / "Remove user" menu, on a card's band or at the end of
+/// a table row. A missing callback leaves its item out.
 class _UserMenu extends StatelessWidget {
   final String username;
   final Color iconColor;
-  final VoidCallback onRemove;
+  final VoidCallback? onEdit;
+  final VoidCallback? onRemove;
 
-  const _UserMenu({required this.username, required this.iconColor, required this.onRemove});
+  const _UserMenu({required this.username, required this.iconColor, this.onEdit, this.onRemove});
 
   @override
   Widget build(BuildContext context) {
@@ -164,20 +193,48 @@ class _UserMenu extends StatelessWidget {
         color: AppColors.pureWhite,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         icon: Icon(Icons.more_horiz_rounded, color: iconColor),
-        onSelected: (_) => onRemove(),
-        itemBuilder: (context) => const [
-          PopupMenuItem(
-            value: 'remove',
-            child: Row(
-              children: [
-                Icon(Icons.person_remove_outlined, size: 18, color: AppColors.error),
-                SizedBox(width: 10),
-                Text('Remove user', style: TextStyle(color: AppColors.error)),
-              ],
+        onSelected: (action) => (action == 'edit' ? onEdit : onRemove)?.call(),
+        itemBuilder: (context) => [
+          if (onEdit != null)
+            PopupMenuItem(
+              value: 'edit',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 10),
+                  Text('Edit user', style: TextStyle(color: AppColors.textPrimaryLight)),
+                ],
+              ),
             ),
-          ),
+          if (onRemove != null)
+            const PopupMenuItem(
+              value: 'remove',
+              child: Row(
+                children: [
+                  Icon(Icons.person_remove_outlined, size: 18, color: AppColors.error),
+                  SizedBox(width: 10),
+                  Text('Remove user', style: TextStyle(color: AppColors.error)),
+                ],
+              ),
+            ),
         ],
       ),
+    );
+  }
+}
+
+extension on _UsersSectionState {
+  /// Edit for everyone; Remove for others who are not Admins. Null when
+  /// there is nothing to offer.
+  Widget? _menuFor(AppUser user, Color iconColor) {
+    final onEdit = widget.onEditUser;
+    final canRemove = user.id != widget.currentUserId && user.role != UserRole.admin;
+    if (onEdit == null && !canRemove) return null;
+    return _UserMenu(
+      username: user.username,
+      iconColor: iconColor,
+      onEdit: onEdit == null ? null : () => onEdit(user),
+      onRemove: canRemove ? () => widget.onRemoveUser(user) : null,
     );
   }
 }
@@ -257,15 +314,9 @@ class _UserCard extends StatelessWidget {
   final AppUser user;
   final bool isYou;
   final String? activity;
-  final VoidCallback onRemove;
+  final Widget? menu;
 
-  const _UserCard({
-    super.key,
-    required this.user,
-    required this.isYou,
-    this.activity,
-    required this.onRemove,
-  });
+  const _UserCard({super.key, required this.user, required this.isYou, this.activity, this.menu});
 
   @override
   Widget build(BuildContext context) {
@@ -275,9 +326,7 @@ class _UserCard extends StatelessWidget {
       color: role.color,
       avatar: BandCard.avatarCircle(role.color, BandCard.initial(user.name)),
       badges: [BandBadge(icon: role.icon, label: role.label)],
-      trailing: isYou
-          ? null
-          : _UserMenu(username: user.username, iconColor: AppColors.pureWhite, onRemove: onRemove),
+      trailing: menu,
       corner: isYou
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

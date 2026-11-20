@@ -9,8 +9,10 @@ import '../../core/utils/responsive.dart';
 import '../../models/booking.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_form_sheet.dart';
+import '../../widgets/full_screen_dialog.dart';
 import '../../widgets/list_table_switcher.dart';
 import '../dashboard/widgets/report_table.dart';
+import 'widgets/booking_form.dart';
 import 'widgets/booking_widgets.dart';
 import 'widgets/payment_form.dart';
 
@@ -61,27 +63,67 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       PaymentForm(
         booking: booking,
         newId: 'p${booking.id}-${booking.payments.length + ++_paymentCount}',
-        onSubmit: (payment) {
+        onSubmit: (payment) async {
+          if (!await runSave(context, () => widget.controller.addPayment(booking.id, payment)) || !mounted) return;
           Navigator.of(context).pop();
-          widget.controller.addPayment(booking.id, payment);
           showAppMessage(context, '${MoneyText.full(payment.amount)} recorded for ${booking.customer.name}.');
         },
       ),
     );
   }
 
-  void _approve(Booking booking) {
-    widget.controller.approve(booking.id);
+  /// Corrects an approved booking, or a rejected one and sends it back
+  /// for approval ([resubmit]).
+  Future<void> _editBooking(Booking booking, {bool resubmit = false}) {
+    return showAppForm(
+      context,
+      BookingForm.edit(
+        booking: booking,
+        resubmit: resubmit,
+        onSubmit: (updated) async {
+          final save = resubmit ? widget.controller.resubmit : widget.controller.updateBooking;
+          if (!await runSave(context, () => save(updated)) || !mounted) return;
+          Navigator.of(context).pop();
+          showAppMessage(
+            context,
+            resubmit
+                ? 'Booking for ${updated.customer.name} sent for re-approval.'
+                : 'Booking for ${updated.customer.name} updated.',
+          );
+        },
+      ),
+    );
+  }
+
+  /// Sends a rejected booking back for approval as it is.
+  Future<void> _resubmit(Booking booking) async {
+    if (!await runSave(context, () => widget.controller.resubmit(booking)) || !mounted) return;
+    showAppMessage(context, 'Booking for ${booking.customer.name} sent for re-approval.');
+  }
+
+  /// Null when this user may not change it, or the booking is not approved.
+  ValueChanged<LoanStatus>? _loanStatusAction(Booking booking, PaymentPart part) {
+    if (!widget.canRecordPayments || booking.status != BookingStatus.approved) return null;
+    return (status) async {
+      if (!await runSave(context, () => widget.controller.updateLoanStatus(booking.id, part, status)) || !mounted) return;
+      showAppMessage(context, 'Loan marked ${status.label}.');
+    };
+  }
+
+  Future<void> _approve(Booking booking) async {
+    if (!await runSave(context, () => widget.controller.approve(booking.id)) || !mounted) return;
     showAppMessage(context, 'Booking for ${booking.customer.name} approved.');
   }
 
-  void _reject(Booking booking) {
-    widget.controller.reject(booking.id);
+  Future<void> _reject(Booking booking) async {
+    if (!await runSave(context, () => widget.controller.reject(booking.id)) || !mounted) return;
     showAppMessage(context, 'Booking for ${booking.customer.name} rejected. Plot ${booking.plotNumber} is free again.');
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => FullScreenDialogFrame(child: _buildPage(context));
+
+  Widget _buildPage(BuildContext context) {
     final booking = widget.controller.bookingById(widget.bookingId);
     final wide = Responsive.isWeb(context);
 
@@ -116,19 +158,15 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
 
   Widget _buildHeader(Booking booking) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 10, 16, 10),
-      decoration: const BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
+      decoration: BoxDecoration(
         color: AppColors.pureWhite,
         border: Border(bottom: BorderSide(color: AppColors.lightBorder)),
       ),
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'Back',
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimaryLight),
-          ),
-          const SizedBox(width: 4),
+          const AppBackButton(),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -182,7 +220,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (final plan in booking.plans) ...[
-                _PlanCard(booking: booking, plan: plan),
+                _PlanCard(booking: booking, plan: plan, onLoanStatus: _loanStatusAction(booking, plan.part)),
                 const SizedBox(height: 14),
               ],
               _PaymentsCard(booking: booking),
@@ -200,7 +238,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
         _SummaryCard(booking: booking),
         const SizedBox(height: 12),
         for (final plan in booking.plans) ...[
-          _PlanCard(booking: booking, plan: plan),
+          _PlanCard(booking: booking, plan: plan, onLoanStatus: _loanStatusAction(booking, plan.part)),
           const SizedBox(height: 12),
         ],
         _PaymentsCard(booking: booking),
@@ -230,7 +268,35 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
           onPressed: () => _approve(booking),
         ),
       ],
-      if (widget.canRecordPayments && booking.status != BookingStatus.rejected && booking.balance > 0)
+      // Only an approved booking can be corrected.
+      if (widget.canRecordPayments && booking.status == BookingStatus.approved)
+        AppButton.outline(
+          key: const ValueKey('detail-edit'),
+          text: 'Edit Booking',
+          width: wide ? 180 : double.infinity,
+          icon: Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
+          onPressed: () => _editBooking(booking),
+        ),
+      // A rejected booking can be corrected and sent back for approval.
+      if (widget.canRecordPayments && booking.status == BookingStatus.rejected) ...[
+        AppButton.outline(
+          key: const ValueKey('detail-edit-resubmit'),
+          text: 'Edit Details',
+          width: wide ? 170 : double.infinity,
+          icon: Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
+          onPressed: () => _editBooking(booking, resubmit: true),
+        ),
+        AppButton.primary(
+          key: const ValueKey('detail-resubmit'),
+          text: 'Send for Re-approval',
+          width: wide ? 230 : double.infinity,
+          gradient: AppColors.brandGradient,
+          icon: const Icon(Icons.send_rounded, color: Colors.white, size: 16),
+          onPressed: () => _resubmit(booking),
+        ),
+      ],
+      // Payments start once the Admin approves.
+      if (widget.canRecordPayments && booking.status == BookingStatus.approved && booking.balance > 0)
         AppButton.primary(
           key: const ValueKey('record-payment'),
           text: 'Record Payment',
@@ -244,7 +310,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
 
     return Container(
       padding: EdgeInsets.fromLTRB(16, 12, wide ? 32 : 16, 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.pureWhite,
         border: Border(top: BorderSide(color: AppColors.lightBorder)),
       ),
@@ -310,6 +376,82 @@ class _Card extends StatelessWidget {
 }
 
 /// Label on the left, value on the right.
+Color loanStatusColor(LoanStatus status) => switch (status) {
+      LoanStatus.applied => const Color(0xFFC98A2E),
+      LoanStatus.sanctioned => const Color(0xFF3A7CA5),
+      LoanStatus.partlyDisbursed => AppColors.primaryBright,
+      LoanStatus.disbursed => const Color(0xFF3F8F5A),
+    };
+
+/// Loan status as a coloured chip, with a menu to mark it while the
+/// loan is still Applied or Sanctioned.
+class _LoanStatusRow extends StatelessWidget {
+  final PaymentPart part;
+  final LoanStatus status;
+  final ValueChanged<LoanStatus>? onChange;
+
+  const _LoanStatusRow({required this.part, required this.status, this.onChange});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = loanStatusColor(status);
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            status.label,
+            key: ValueKey('loan-status-${part.name}'),
+            style: AppTypography.caption.copyWith(color: color, fontWeight: FontWeight.w700),
+          ),
+          if (onChange != null) ...[
+            const SizedBox(width: 2),
+            Icon(Icons.arrow_drop_down_rounded, size: 18, color: color),
+          ],
+        ],
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Loan Status',
+              style: AppTypography.bodySmall.copyWith(color: AppColors.textMutedLight),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: onChange == null
+                  ? chip
+                  : PopupMenuButton<LoanStatus>(
+                      key: ValueKey('loan-status-menu-${part.name}'),
+                      tooltip: 'Change loan status',
+                      initialValue: status,
+                      onSelected: onChange,
+                      itemBuilder: (_) => [
+                        for (final s in LoanStatus.manual) PopupMenuItem(value: s, child: Text(s.label)),
+                      ],
+                      child: chip,
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
@@ -378,8 +520,8 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.brandDeep, AppColors.brandDark, Color(0xFF6F8A69)],
+        gradient: LinearGradient(
+          colors: [AppColors.brandDeep, AppColors.brandDark, Color.lerp(AppColors.brandDark, AppColors.sageMid, 0.45)!],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -413,7 +555,7 @@ class _SummaryCard extends StatelessWidget {
               value: booking.paidRatio,
               minHeight: 8,
               backgroundColor: Colors.white.withValues(alpha: 0.15),
-              valueColor: const AlwaysStoppedAnimation(AppColors.mint),
+              valueColor: AlwaysStoppedAnimation(AppColors.mint),
             ),
           ),
           const SizedBox(height: 6),
@@ -479,7 +621,7 @@ class _DetailsCard extends StatelessWidget {
           _InfoRow('Mobile', c.mobile),
           if (c.email.isNotEmpty) _InfoRow('Email', c.email),
           if (c.address.isNotEmpty) _InfoRow('Address', c.address),
-          const Divider(color: AppColors.lightBorder, height: 20),
+          Divider(color: AppColors.lightBorder, height: 20),
           _InfoRow('Site', booking.siteName),
           _InfoRow('Plot No.', booking.plotNumber),
           if (booking.plotSize != null) _InfoRow('Size', booking.plotSize!),
@@ -498,7 +640,10 @@ class _PlanCard extends StatelessWidget {
   final Booking booking;
   final PaymentPlan plan;
 
-  const _PlanCard({required this.booking, required this.plan});
+  /// Marks the loan Applied or Sanctioned; null when not allowed.
+  final ValueChanged<LoanStatus>? onLoanStatus;
+
+  const _PlanCard({required this.booking, required this.plan, this.onLoanStatus});
 
   @override
   Widget build(BuildContext context) {
@@ -521,7 +666,14 @@ class _PlanCard extends StatelessWidget {
             _InfoRow('Bank / Lender', loan.bankName),
             _InfoRow('Loan Amount', MoneyText.full(loan.amount)),
             if (loan.reference.isNotEmpty) _InfoRow('Loan A/c / Ref.', loan.reference),
-            _InfoRow('Loan Status', loan.status.label),
+            _LoanStatusRow(
+              part: plan.part,
+              status: loan.status,
+              // Once the bank pays, the status follows its payments.
+              onChange: loan.status.isManual ? onLoanStatus : null,
+            ),
+            _InfoRow('Loan Received', MoneyText.full(booking.loanReceivedFor(plan.part))),
+            _InfoRow('Loan to Come', MoneyText.full(booking.loanToComeFor(plan.part))),
             _InfoRow('Customer Share', MoneyText.full(plan.ownContribution)),
           ],
           const SizedBox(height: 4),

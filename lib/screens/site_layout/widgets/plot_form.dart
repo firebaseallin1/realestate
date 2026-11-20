@@ -132,7 +132,7 @@ class _PlotFormState extends State<PlotForm> {
               IconButton(
                 tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
+                icon: Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
               ),
             ],
           ),
@@ -167,7 +167,7 @@ class _PlotFormState extends State<PlotForm> {
                   validator: _sizeValidator,
                 ),
               ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 40, left: 10, right: 10),
                 child: Icon(Icons.close_rounded, size: 16, color: AppColors.textMutedLight),
               ),
@@ -193,7 +193,7 @@ class _PlotFormState extends State<PlotForm> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.square_foot_rounded, size: 20, color: AppColors.primary),
+                Icon(Icons.square_foot_rounded, size: 20, color: AppColors.primary),
                 const SizedBox(width: 10),
                 Text(
                   'Area',
@@ -227,7 +227,7 @@ class _PlotFormState extends State<PlotForm> {
                         title: facing.label,
                         icon: Transform.rotate(
                           angle: facing.degrees * math.pi / 180,
-                          child: const Icon(Icons.navigation_rounded, size: 18, color: AppColors.primary),
+                          child: Icon(Icons.navigation_rounded, size: 18, color: AppColors.primary),
                         ),
                       ),
                   ],

@@ -38,7 +38,7 @@ class LoginWebView extends StatelessWidget {
   /// and a footer line.
   Widget _buildFormPanel() {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [AppColors.offWhite, AppColors.pureWhite],
           begin: Alignment.topRight,
@@ -75,7 +75,7 @@ class LoginWebView extends StatelessWidget {
 
   Widget _buildBrandPanel() {
     return Container(
-      decoration: const BoxDecoration(gradient: AppColors.brandGradient),
+      decoration: BoxDecoration(gradient: AppColors.brandGradient),
       child: Stack(
         children: [
           // Decorative Rings

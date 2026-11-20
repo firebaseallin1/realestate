@@ -11,7 +11,8 @@ enum MenuGroup {
   reports('Reports', Icons.assessment_outlined),
   sales('Sales', Icons.handshake_outlined),
   construction('Construction', Icons.engineering_outlined),
-  siteWork('Site Work', Icons.construction_outlined);
+  siteWork('Site Work', Icons.construction_outlined),
+  settings('Settings', Icons.settings_outlined);
 
   const MenuGroup(this.label, this.icon);
 
@@ -67,7 +68,10 @@ enum DashboardSection {
   labor('Labour', 'Attendance and workforce', Icons.groups_2_outlined, MenuGroup.siteWork, _incharge),
   materials('Materials', 'Stock received and used', Icons.inventory_outlined, MenuGroup.siteWork, _incharge),
   sitePhotos('Photos', 'Progress photos from site', Icons.photo_camera_outlined, MenuGroup.siteWork, _incharge),
-  siteReports('Site Reports', 'Daily and weekly site reports', Icons.description_outlined, MenuGroup.siteWork, _incharge);
+  siteReports('Site Reports', 'Daily and weekly site reports', Icons.description_outlined, MenuGroup.siteWork, _incharge),
+
+  // Admin, last in the menu
+  appSettings('App Settings', 'File storage, theme and text', Icons.tune_rounded, MenuGroup.settings, _admin);
 
   const DashboardSection(this.label, this.subtitle, this.icon, this.group, this.roles);
 

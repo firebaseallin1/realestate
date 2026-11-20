@@ -12,6 +12,7 @@ import '../../../models/site.dart';
 import '../../../widgets/app_form_sheet.dart';
 import '../../../widgets/app_form_shell.dart';
 import '../../../widgets/app_text_field.dart';
+import '../../../widgets/remote_file_bytes.dart';
 import 'construction_forms.dart';
 
 /// The bill itself: a PDF or a zoomable photo.
@@ -27,15 +28,20 @@ class BillFilePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (builderOverride != null) return builderOverride!(file);
-    if (file.isPdf) return SfPdfViewer.memory(file.bytes);
-    return InteractiveViewer(
-      maxScale: 5,
-      child: Center(
-        child: Image.memory(
-          file.bytes,
-          errorBuilder: (_, _, _) => const Text('This photo could not be shown.'),
-        ),
-      ),
+    return RemoteFileBytes(
+      file: file,
+      builder: (_, bytes) {
+        if (file.isPdf) return SfPdfViewer.memory(bytes);
+        return InteractiveViewer(
+          maxScale: 5,
+          child: Center(
+            child: Image.memory(
+              bytes,
+              errorBuilder: (_, _, _) => const Text('This photo could not be shown.'),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -102,7 +108,7 @@ class _BillCompareScreenState extends State<BillCompareScreen> {
             key: const ValueKey('bill-open-file'),
             tooltip: 'Full screen',
             onPressed: () => showBillFile(context, widget.file),
-            icon: const Icon(Icons.fullscreen_rounded, color: AppColors.primary),
+            icon: Icon(Icons.fullscreen_rounded, color: AppColors.primary),
           ),
           if (canHide)
             IconButton(
@@ -139,7 +145,7 @@ class _BillCompareScreenState extends State<BillCompareScreen> {
             ],
           ),
         ),
-        const VerticalDivider(width: 1, color: AppColors.lightBorder),
+        VerticalDivider(width: 1, color: AppColors.lightBorder),
         SizedBox(width: 500, child: _buildDetails()),
       ],
     );
@@ -156,7 +162,7 @@ class _BillCompareScreenState extends State<BillCompareScreen> {
               height: constraints.maxHeight * 0.42,
               child: ClipRect(child: BillFilePreview(file: widget.file)),
             ),
-          const Divider(height: 1, color: AppColors.lightBorder),
+          Divider(height: 1, color: AppColors.lightBorder),
           Expanded(child: _buildDetails()),
         ],
       ),
@@ -235,7 +241,7 @@ class _BillItemRow extends StatelessWidget {
             key: editKey,
             tooltip: 'Edit',
             onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
+            icon: Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
           ),
           if (onDelete != null)
             IconButton(
@@ -555,7 +561,7 @@ class MaterialBillView extends StatelessWidget {
                 IconButton(
                   tooltip: 'Close',
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
+                  icon: Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
                 ),
               ],
             ),
@@ -565,7 +571,8 @@ class MaterialBillView extends StatelessWidget {
                 key: ValueKey('saved-bill-item-${item.id}'),
                 item: item,
                 editKey: ValueKey('saved-bill-item-edit-${item.id}'),
-                onEdit: () => onEdit(item),
+                // Edits the whole material, not just this bill's share of it.
+                onEdit: () => onEdit(project.materialById(item.id) ?? item),
               ),
             const SizedBox(height: 6),
             _TotalRow(label: 'Items total', amount: items.fold(0, (sum, item) => sum + item.amount)),

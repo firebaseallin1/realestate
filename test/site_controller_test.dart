@@ -51,4 +51,27 @@ void main() {
     final c = SiteController.test();
     expect(c.soldUnits + c.bookedUnits + c.availableUnits, c.totalUnits);
   });
+
+  test('A location keeps its map point and shows it in its summary', () async {
+    final c = SiteController.test();
+    const goa = MapPoint(15.4909, 73.8278);
+    await c.saveLocation('Goa', point: goa);
+    expect(c.pointOf('goa'), goa);
+    expect(c.locationSummaries.firstWhere((s) => s.name == 'Goa').point, goa);
+
+    expect(c.pointOf('Chennai'), isNull);
+    const chennai = MapPoint(13.0827, 80.2707);
+    await c.setLocationPoint('Chennai', chennai);
+    expect(c.locationSummaries.firstWhere((s) => s.name == 'Chennai').point, chennai);
+
+    await c.setLocationPoint('Chennai', null);
+    expect(c.pointOf('Chennai'), isNull);
+  });
+
+  test('A map point is read from the server, or absent', () {
+    final withPoint = LocationInfo.fromJson({'id': 'l1', 'name': 'Goa', 'latitude': 15.5, 'longitude': 73});
+    expect(withPoint.point, const MapPoint(15.5, 73.0));
+    final without = LocationInfo.fromJson({'id': 'l2', 'name': 'Pune', 'latitude': null, 'longitude': null});
+    expect(without.point, isNull);
+  });
 }

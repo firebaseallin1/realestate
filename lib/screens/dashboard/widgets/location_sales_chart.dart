@@ -28,7 +28,7 @@ class LocationSalesChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Wrap(
+          Wrap(
             spacing: 14,
             runSpacing: 6,
             children: [

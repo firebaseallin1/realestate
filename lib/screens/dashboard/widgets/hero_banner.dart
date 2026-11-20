@@ -89,8 +89,8 @@ class HeroBanner extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.brandDeep, AppColors.brandDark, Color(0xFF6F8A69)],
+        gradient: LinearGradient(
+          colors: [AppColors.brandDeep, AppColors.brandDark, Color.lerp(AppColors.brandDark, AppColors.sageMid, 0.45)!],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

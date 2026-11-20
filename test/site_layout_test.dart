@@ -195,7 +195,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SiteLayoutScreen), findsOneWidget);
-    expect(find.text('PLOT LAYOUT'), findsOneWidget);
+    expect(find.textContaining('Plot layout ·'), findsOneWidget);
   });
 
   testWidgets('A failed upload explains itself under the field', (tester) async {

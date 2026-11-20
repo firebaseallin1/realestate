@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../models/site.dart';
+import '../../../widgets/remote_file_bytes.dart';
 
 /// Colors for plot status on the layout and in the plot list.
 Color plotStatusColor(PlotStatus status) {
@@ -87,10 +88,14 @@ class _PlotCanvasState extends State<PlotCanvas> {
                   child: map != null && map.isImage
                       ? ColoredBox(
                           color: AppColors.pureWhite,
-                          child: Image.memory(
-                            map.bytes,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const _GraphPaper(),
+                          child: RemoteFileBytes(
+                            file: map,
+                            failed: const _GraphPaper(),
+                            builder: (_, bytes) => Image.memory(
+                              bytes,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, _, _) => const _GraphPaper(),
+                            ),
                           ),
                         )
                       : const _GraphPaper(),
@@ -268,7 +273,7 @@ class _NorthArrow extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.navigation_rounded, size: 14, color: AppColors.brandDark),
+          Icon(Icons.navigation_rounded, size: 14, color: AppColors.brandDark),
           Text(
             'N',
             style: AppTypography.caption.copyWith(

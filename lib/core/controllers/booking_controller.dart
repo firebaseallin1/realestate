@@ -1,23 +1,35 @@
 import 'package:flutter/foundation.dart';
+
 import '../../models/booking.dart';
+import '../api/api_client.dart';
 import '../../models/site.dart';
+import '../repositories/booking_repository.dart';
 import 'site_controller.dart';
 
-/// BookingController holds plot bookings and their payments (in memory
-/// for now). It keeps the site's units in step: a new booking marks the
-/// plot booked, a rejected one frees it, and an approved booking that is
-/// fully paid marks it sold.
+/// BookingController holds plot bookings and their payments, and keeps the
+/// site's units in step: a new booking marks the plot booked, a rejected one
+/// frees it, and an approved booking that is fully paid marks it sold.
+///
+/// The app's [instance] loads from and saves to the server, which applies
+/// those rules and throws an ApiException if it refuses a change.
 class BookingController extends ChangeNotifier {
-  /// A controller with the sample bookings, keeping [_sites] in step.
-  /// The app shares [instance]; tests and previews make their own.
-  BookingController(this._sites) {
+  /// A controller with the sample bookings in memory, keeping [_sites] in
+  /// step. Tests and previews make their own.
+  BookingController(this._sites) : _repository = null {
     _seedBookings();
   }
 
-  static final BookingController instance = BookingController(SiteController.instance);
+  BookingController._server(this._sites) : _repository = BookingRepository();
+
+  static final BookingController instance = BookingController._server(SiteController.instance);
 
   final SiteController _sites;
+  final BookingRepository? _repository;
   final List<Booking> _bookings = [];
+
+  /// Called after a booking changes on the server, as approval can open a
+  /// construction project.
+  Future<void> Function()? onServerChange;
   int _nextId = 1;
 
   void _seedBookings() {
@@ -31,9 +43,7 @@ class BookingController extends ChangeNotifier {
         facing: PlotFacing.east,
         customer: const Customer(name: 'Ramesh Naidu', mobile: '9849012345', email: 'ramesh@example.com'),
         type: BookingType.withoutConstruction,
-        plans: const [
-          PaymentPlan(part: PaymentPart.plot, value: 1800000, mode: PaymentMode.fullPayment),
-        ],
+        plans: const [PaymentPlan(part: PaymentPart.plot, value: 1800000, mode: PaymentMode.fullPayment)],
         payments: [
           PaymentEntry(
             id: 'p1',
@@ -62,7 +72,12 @@ class BookingController extends ChangeNotifier {
             part: PaymentPart.plot,
             value: 1500000,
             mode: PaymentMode.loan,
-            loan: LoanDetails(bankName: 'SBI', amount: 1000000, reference: 'SBI-HL-55120', status: LoanStatus.sanctioned),
+            loan: LoanDetails(
+              bankName: 'SBI',
+              amount: 1000000,
+              reference: 'SBI-HL-55120',
+              status: LoanStatus.sanctioned,
+            ),
           ),
           PaymentPlan(
             part: PaymentPart.construction,
@@ -98,8 +113,21 @@ class BookingController extends ChangeNotifier {
           PaymentPlan(part: PaymentPart.construction, value: 4000000, mode: PaymentMode.fullPayment),
         ],
         payments: [
-          PaymentEntry(id: 'p3', part: PaymentPart.plot, amount: 2000000, date: DateTime(2026, 8, 20), method: PaymentMethod.cheque, reference: 'CHQ 004512'),
-          PaymentEntry(id: 'p4', part: PaymentPart.construction, amount: 1000000, date: DateTime(2026, 9, 25), method: PaymentMethod.upi),
+          PaymentEntry(
+            id: 'p3',
+            part: PaymentPart.plot,
+            amount: 2000000,
+            date: DateTime(2026, 8, 20),
+            method: PaymentMethod.cheque,
+            reference: 'CHQ 004512',
+          ),
+          PaymentEntry(
+            id: 'p4',
+            part: PaymentPart.construction,
+            amount: 1000000,
+            date: DateTime(2026, 9, 25),
+            method: PaymentMethod.upi,
+          ),
         ],
         status: BookingStatus.approved,
         bookedOn: DateTime(2026, 8, 20),
@@ -149,15 +177,55 @@ class BookingController extends ChangeNotifier {
 
   String newId() => 'b${DateTime.now().microsecondsSinceEpoch}-${_nextId++}';
 
-  void addBooking(Booking booking) {
+  /// Fetches the bookings from the server.
+  Future<void> load() async {
+    final repository = _repository;
+    if (repository == null) return;
+    final bookings = await repository.fetchBookings();
+    _bookings
+      ..clear()
+      ..addAll(bookings);
+    notifyListeners();
+  }
+
+  /// Forgets everything on sign-out, so the next user cannot see it.
+  void clear() {
+    _bookings.clear();
+    notifyListeners();
+  }
+
+  /// Keeps [saved] from the server, then fetches what it changed elsewhere.
+  Future<void> _applyFromServer(Booking saved) async {
+    final index = _bookings.indexWhere((b) => b.id == saved.id);
+    if (index == -1) {
+      _bookings.add(saved);
+    } else {
+      _bookings[index] = saved;
+    }
+    notifyListeners();
+    await _sites.load();
+    await onServerChange?.call();
+  }
+
+  Future<void> addBooking(Booking booking) async {
+    final repository = _repository;
+    if (repository != null) return _applyFromServer(await repository.createBooking(booking));
     _bookings.add(booking);
     _moveUnit(booking, from: PlotStatus.available, to: PlotStatus.booked);
     notifyListeners();
   }
 
-  void approve(String id) => _setStatus(id, BookingStatus.approved);
+  Future<void> approve(String id) async {
+    final repository = _repository;
+    if (repository != null) return _applyFromServer(await repository.approve(id));
+    _setStatus(id, BookingStatus.approved);
+  }
 
-  void reject(String id) => _setStatus(id, BookingStatus.rejected);
+  Future<void> reject(String id) async {
+    final repository = _repository;
+    if (repository != null) return _applyFromServer(await repository.reject(id));
+    _setStatus(id, BookingStatus.rejected);
+  }
 
   void _setStatus(String id, BookingStatus status) {
     final index = _bookings.indexWhere((b) => b.id == id);
@@ -176,11 +244,74 @@ class BookingController extends ChangeNotifier {
   }
 
   /// Records [payment] against booking [id]. Rejected bookings take none.
-  void addPayment(String id, PaymentEntry payment) {
-    final index = _bookings.indexWhere((b) => b.id == id);
-    if (index == -1 || _bookings[index].status == BookingStatus.rejected) return;
+  /// Saves corrections to an approved booking: customer, values, payment
+  /// mode and loan. A changed value can finish or reopen the sale.
+  Future<void> updateBooking(Booking updated) async {
+    final repository = _repository;
+    if (repository != null) return _applyFromServer(await repository.updateBooking(updated));
+    final index = _bookings.indexWhere((b) => b.id == updated.id);
+    if (index == -1) return;
     final before = _bookings[index];
-    final after = before.copyWith(payments: [...before.payments, payment]);
+    _bookings[index] = updated;
+    _moveUnit(updated, from: _unitStatus(before), to: _unitStatus(updated));
+    notifyListeners();
+  }
+
+  /// Sends a rejected booking, with any corrections, back for approval.
+  /// Its plot is held again, unless another booking has taken it.
+  Future<void> resubmit(Booking updated) async {
+    final repository = _repository;
+    if (repository != null) return _applyFromServer(await repository.resubmit(updated));
+    final index = _bookings.indexWhere((b) => b.id == updated.id);
+    if (index == -1 || _bookings[index].status != BookingStatus.rejected) return;
+    if (isPlotTaken(updated.siteId, updated.plotNumber)) {
+      throw ApiException('PLOT_TAKEN', 'Plot ${updated.plotNumber} is already booked.');
+    }
+    final pending = updated.copyWith(status: BookingStatus.pending);
+    _bookings[index] = pending;
+    _moveUnit(pending, from: PlotStatus.available, to: PlotStatus.booked);
+    notifyListeners();
+  }
+
+  /// Marks a part's loan Applied or Sanctioned, before the bank pays out.
+  Future<void> updateLoanStatus(String id, PaymentPart part, LoanStatus status) async {
+    final repository = _repository;
+    if (repository != null) return _applyFromServer(await repository.updateLoanStatus(id, part, status));
+    final index = _bookings.indexWhere((b) => b.id == id);
+    if (index == -1) return;
+    final booking = _bookings[index];
+    _bookings[index] = booking.copyWith(
+      plans: [
+        for (final plan in booking.plans)
+          plan.part == part && plan.loan != null ? plan.withLoan(plan.loan!.copyWith(status: status)) : plan,
+      ],
+    );
+    notifyListeners();
+  }
+
+  Future<void> addPayment(String id, PaymentEntry payment) async {
+    final repository = _repository;
+    if (repository != null) return _applyFromServer(await repository.addPayment(id, payment));
+
+    final index = _bookings.indexWhere((b) => b.id == id);
+    if (index == -1 || _bookings[index].status != BookingStatus.approved) return;
+    final before = _bookings[index];
+    var after = before.copyWith(payments: [...before.payments, payment]);
+    if (payment.method == PaymentMethod.loanDisbursement) {
+      // The bank's money moves the loan to partly or fully disbursed.
+      after = after.copyWith(
+        plans: [
+          for (final plan in after.plans)
+            plan.part == payment.part && plan.loan != null
+                ? plan.withLoan(
+                    plan.loan!.copyWith(
+                      status: after.loanToComeFor(plan.part) <= 0 ? LoanStatus.disbursed : LoanStatus.partlyDisbursed,
+                    ),
+                  )
+                : plan,
+        ],
+      );
+    }
     _bookings[index] = after;
 
     if (after.status == BookingStatus.approved && after.isFullyPaid && !before.isFullyPaid) {
@@ -199,9 +330,9 @@ class BookingController extends ChangeNotifier {
     if (site == null || from == to) return;
 
     if (site.hasLayout && booking.plotId != null) {
-      _sites.updateSite(site.withPlots([
-        for (final plot in site.plots) plot.id == booking.plotId ? plot.copyWith(status: to) : plot,
-      ]));
+      _sites.updateSite(
+        site.withPlots([for (final plot in site.plots) plot.id == booking.plotId ? plot.copyWith(status: to) : plot]),
+      );
       return;
     }
 

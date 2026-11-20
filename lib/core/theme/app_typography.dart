@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
+
 import 'app_colors.dart';
+import 'app_text_options.dart';
 
 /// AppTypography provides typography styles for headers, subheadings,
-/// body copy, button labels, and captions, all set in Josefin Sans.
+/// body copy, button labels, and captions, set in the font chosen in Settings > Text.
 /// Sizes are kept compact so screens fit more without crowding.
 class AppTypography {
   AppTypography._();
 
-  /// The app font, bundled in assets/fonts (see pubspec.yaml).
-  static const String fontFamily = 'JosefinSans';
+  /// The font an Admin picked in Settings > Text; null uses the device's font.
+  static String? get fontFamily => AppFont.current.family;
 
   // Headings
-  static const TextStyle displayLarge = TextStyle(
+  static TextStyle get displayLarge => TextStyle(
     fontFamily: fontFamily,
     fontSize: 28,
     fontWeight: FontWeight.w800,
@@ -20,7 +22,7 @@ class AppTypography {
     height: 1.2,
   );
 
-  static const TextStyle displayMedium = TextStyle(
+  static TextStyle get displayMedium => TextStyle(
     fontFamily: fontFamily,
     fontSize: 22,
     fontWeight: FontWeight.w700,
@@ -29,7 +31,7 @@ class AppTypography {
     height: 1.25,
   );
 
-  static const TextStyle displaySmall = TextStyle(
+  static TextStyle get displaySmall => TextStyle(
     fontFamily: fontFamily,
     fontSize: 19,
     fontWeight: FontWeight.w700,
@@ -39,7 +41,7 @@ class AppTypography {
   );
 
   // Titles
-  static const TextStyle titleLarge = TextStyle(
+  static TextStyle get titleLarge => TextStyle(
     fontFamily: fontFamily,
     fontSize: 17,
     fontWeight: FontWeight.w600,
@@ -48,7 +50,7 @@ class AppTypography {
     height: 1.35,
   );
 
-  static const TextStyle titleMedium = TextStyle(
+  static TextStyle get titleMedium => TextStyle(
     fontFamily: fontFamily,
     fontSize: 15,
     fontWeight: FontWeight.w600,
@@ -56,7 +58,7 @@ class AppTypography {
     height: 1.4,
   );
 
-  static const TextStyle titleSmall = TextStyle(
+  static TextStyle get titleSmall => TextStyle(
     fontFamily: fontFamily,
     fontSize: 13.5,
     fontWeight: FontWeight.w600,
@@ -65,7 +67,7 @@ class AppTypography {
   );
 
   // Body
-  static const TextStyle bodyLarge = TextStyle(
+  static TextStyle get bodyLarge => TextStyle(
     fontFamily: fontFamily,
     fontSize: 14.5,
     fontWeight: FontWeight.w400,
@@ -73,7 +75,7 @@ class AppTypography {
     height: 1.4,
   );
 
-  static const TextStyle bodyMedium = TextStyle(
+  static TextStyle get bodyMedium => TextStyle(
     fontFamily: fontFamily,
     fontSize: 13,
     fontWeight: FontWeight.w400,
@@ -81,7 +83,7 @@ class AppTypography {
     height: 1.4,
   );
 
-  static const TextStyle bodySmall = TextStyle(
+  static TextStyle get bodySmall => TextStyle(
     fontFamily: fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w400,
@@ -90,7 +92,7 @@ class AppTypography {
   );
 
   // Labels & Buttons
-  static const TextStyle buttonLarge = TextStyle(
+  static TextStyle get buttonLarge => TextStyle(
     fontFamily: fontFamily,
     fontSize: 14.5,
     fontWeight: FontWeight.w600,
@@ -98,7 +100,7 @@ class AppTypography {
     color: Colors.white,
   );
 
-  static const TextStyle buttonMedium = TextStyle(
+  static TextStyle get buttonMedium => TextStyle(
     fontFamily: fontFamily,
     fontSize: 13,
     fontWeight: FontWeight.w600,
@@ -106,18 +108,9 @@ class AppTypography {
     color: Colors.white,
   );
 
-  static const TextStyle labelMedium = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 12,
-    fontWeight: FontWeight.w500,
-    color: AppColors.textSecondaryDark,
-  );
+  static TextStyle get labelMedium =>
+      TextStyle(fontFamily: fontFamily, fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondaryDark);
 
-  static const TextStyle caption = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 11,
-    fontWeight: FontWeight.w400,
-    color: AppColors.textMutedDark,
-  );
+  static TextStyle get caption =>
+      TextStyle(fontFamily: fontFamily, fontSize: 11, fontWeight: FontWeight.w400, color: AppColors.textMutedDark);
 }
-

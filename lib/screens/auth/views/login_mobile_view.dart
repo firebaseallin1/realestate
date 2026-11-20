@@ -84,7 +84,7 @@ class _SageHeader extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [AppColors.brandDeep, AppColors.sage],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

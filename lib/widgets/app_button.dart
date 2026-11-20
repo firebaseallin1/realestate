@@ -55,7 +55,7 @@ class AppButton extends StatefulWidget {
     this.width = double.infinity,
     this.height = 46,
     this.borderRadius = 14,
-    this.gradient = AppColors.brandGradient,
+    this.gradient,
   }) : type = AppButtonType.primary;
 
   /// Factory for Secondary Soft Surface Button

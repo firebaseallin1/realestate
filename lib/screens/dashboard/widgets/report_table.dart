@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
 
@@ -15,7 +17,8 @@ class ReportColumn {
 /// ReportTable is the white report grid used by every report and table view:
 /// a tinted header, striped rows and an optional bold totals row. On narrow
 /// screens it keeps [minWidth] and scrolls sideways. [onRowTap] makes rows
-/// tappable and [rowKeys] names them.
+/// tappable and [rowKeys] names them. Each row is numbered in an S.No
+/// column first, unless [serialNumbers] is false.
 class ReportTable extends StatelessWidget {
   final List<ReportColumn> columns;
   final List<List<Widget>> rows;
@@ -23,6 +26,7 @@ class ReportTable extends StatelessWidget {
   final double minWidth;
   final ValueChanged<int>? onRowTap;
   final List<Key>? rowKeys;
+  final bool serialNumbers;
 
   const ReportTable({
     super.key,
@@ -32,7 +36,11 @@ class ReportTable extends StatelessWidget {
     this.minWidth = 720,
     this.onRowTap,
     this.rowKeys,
+    this.serialNumbers = true,
   });
+
+  /// Width of the S.No column.
+  static const double _serialWidth = 52;
 
   /// Shown for a value that was not entered.
   static const String blank = '—';
@@ -66,7 +74,7 @@ class ReportTable extends StatelessWidget {
               value: ratio,
               minHeight: 4,
               backgroundColor: AppColors.lightSurfaceVariant,
-              valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+              valueColor: AlwaysStoppedAnimation(AppColors.primary),
             ),
           ),
         ),
@@ -80,10 +88,7 @@ class ReportTable extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
         child: Text(
           label,
           style: AppTypography.caption.copyWith(color: color, fontWeight: FontWeight.w700),
@@ -101,16 +106,12 @@ class ReportTable extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.lightBorder),
         boxShadow: [
-          BoxShadow(
-            color: AppColors.brandDark.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
+          BoxShadow(color: AppColors.brandDark.withValues(alpha: 0.04), blurRadius: 16, offset: const Offset(0, 6)),
         ],
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final width = math.max(constraints.maxWidth, minWidth);
+          final width = math.max(constraints.maxWidth, minWidth + (serialNumbers ? _serialWidth : 0));
 
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -119,19 +120,8 @@ class ReportTable extends StatelessWidget {
               child: Column(
                 children: [
                   _row(
-                    [
-                      for (final c in columns)
-                        Text(
-                          c.label.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.textSecondaryLight,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                    ],
+                    [for (final c in columns) _header(c.label)],
+                    serial: _header('S.No'),
                     background: AppColors.mint.withValues(alpha: 0.45),
                     verticalPadding: 13,
                   ),
@@ -147,15 +137,17 @@ class ReportTable extends StatelessWidget {
                     _row(
                       rows[i],
                       key: rowKeys?[i],
+                      serial: Text(
+                        '${i + 1}',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.textMutedLight,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       background: i.isOdd ? AppColors.offWhite : AppColors.pureWhite,
                       onTap: onRowTap == null ? null : () => onRowTap!(i),
                     ),
-                  if (totals != null)
-                    _row(
-                      totals!,
-                      background: AppColors.mint.withValues(alpha: 0.3),
-                      topBorder: true,
-                    ),
+                  if (totals != null) _row(totals!, background: AppColors.mint.withValues(alpha: 0.3), topBorder: true),
                 ],
               ),
             ),
@@ -165,9 +157,21 @@ class ReportTable extends StatelessWidget {
     );
   }
 
+  static Widget _header(String label) => Text(
+    label.toUpperCase(),
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: AppTypography.caption.copyWith(
+      color: AppColors.textSecondaryLight,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.8,
+    ),
+  );
+
   Widget _row(
     List<Widget> cells, {
     Key? key,
+    Widget? serial,
     required Color background,
     double verticalPadding = 12,
     bool topBorder = false,
@@ -190,6 +194,12 @@ class ReportTable extends StatelessWidget {
           ),
           child: Row(
             children: [
+              // The totals row leaves it empty.
+              if (serialNumbers)
+                SizedBox(
+                  width: _serialWidth,
+                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: serial),
+                ),
               for (var i = 0; i < columns.length; i++)
                 Expanded(
                   flex: (columns[i].flex * 10).round(),

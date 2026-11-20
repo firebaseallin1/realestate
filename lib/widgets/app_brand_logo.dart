@@ -61,7 +61,7 @@ class AppBrandLogo extends StatelessWidget {
         SizedBox(height: 4 * scale),
         ShaderMask(
           shaderCallback: (bounds) =>
-              (onDark ? const LinearGradient(colors: [AppColors.pureWhite, AppColors.mint]) : AppColors.brandGradient)
+              (onDark ? LinearGradient(colors: [AppColors.pureWhite, AppColors.mint]) : AppColors.brandGradient)
                   .createShader(bounds),
           child: Text(
             'PROPERTIES',

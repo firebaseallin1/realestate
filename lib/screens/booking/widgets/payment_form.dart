@@ -65,6 +65,10 @@ class _PaymentFormState extends State<PaymentForm> {
     final amount = MoneyText.parse(value);
     if (amount == null || amount <= 0) return 'Enter the amount received.';
     if (amount > _balance) return 'More than the balance of ${MoneyText.full(_balance)}.';
+    if (_method == PaymentMethod.loanDisbursement) {
+      final toCome = widget.booking.loanToComeFor(_part);
+      if (amount > toCome) return 'More than the loan still to come, ${MoneyText.full(toCome)}.';
+    }
     return null;
   }
 
@@ -126,7 +130,7 @@ class _PaymentFormState extends State<PaymentForm> {
               IconButton(
                 tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
+                icon: Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
               ),
             ],
           ),
@@ -193,6 +197,12 @@ class _PaymentFormState extends State<PaymentForm> {
             onChanged: (m) => setState(() => _method = m),
             validator: (m) => m == null ? 'Please select a method.' : null,
           ),
+          if (_method == PaymentMethod.loanDisbursement && plan.loan != null)
+            _LoanNote(
+              bank: plan.loan!.bankName,
+              received: booking.loanReceivedFor(_part),
+              toCome: booking.loanToComeFor(_part),
+            ),
           // Date
           Padding(
             padding: const EdgeInsets.only(bottom: 18),
@@ -209,7 +219,7 @@ class _PaymentFormState extends State<PaymentForm> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.event_rounded, size: 20, color: AppColors.textSecondaryLight),
+                    Icon(Icons.event_rounded, size: 20, color: AppColors.textSecondaryLight),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -294,6 +304,43 @@ class _Figure extends StatelessWidget {
                 color: color ?? AppColors.brandDeep,
                 fontWeight: FontWeight.w700,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown for a loan disbursement: what the bank has paid and has to come.
+/// Saving moves the loan to Partly Disbursed, or Disbursed when complete.
+class _LoanNote extends StatelessWidget {
+  final String bank;
+  final double received;
+  final double toCome;
+
+  const _LoanNote({required this.bank, required this.received, required this.toCome});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('loan-note'),
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.accentGold.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.account_balance_outlined, size: 18, color: AppColors.brandDeep),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '$bank has paid ${MoneyText.full(received)}; ${MoneyText.full(toCome)} is still to come. '
+              'The loan status updates when you save.',
+              style: AppTypography.bodySmall.copyWith(color: AppColors.textPrimaryLight),
             ),
           ),
         ],

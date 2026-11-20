@@ -206,7 +206,7 @@ class _SiteFormState extends State<SiteForm> {
               IconButton(
                 tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
+                icon: Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
               ),
             ],
           ),
@@ -491,7 +491,7 @@ class _SiteFormState extends State<SiteForm> {
           padding: const EdgeInsets.only(bottom: 18),
           child: Row(
             children: [
-              const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primary),
+              Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -517,7 +517,7 @@ class _SiteFormState extends State<SiteForm> {
               ),
             ),
             const SizedBox(width: 10),
-            const Expanded(child: Divider(color: AppColors.lightBorder)),
+            Expanded(child: Divider(color: AppColors.lightBorder)),
           ],
         ),
       ),

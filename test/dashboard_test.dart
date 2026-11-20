@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:real_estate/core/controllers/site_controller.dart';
 import 'package:real_estate/core/controllers/user_controller.dart';
+import 'package:real_estate/core/repositories/local_user_repository.dart';
 import 'package:real_estate/models/app_user.dart';
+import 'package:real_estate/widgets/app_dropdown.dart';
 import 'package:real_estate/screens/dashboard/dashboard_screen.dart';
 import 'package:real_estate/screens/dashboard/sections/role_home_section.dart';
 import 'package:real_estate/screens/dashboard/sections/users_section.dart';
@@ -65,8 +67,7 @@ Future<void> _openSection(WidgetTester tester, DashboardSection section) async {
 
 /// Fills the site form's first step and moves on to the site's details.
 Future<void> _completeLandStep(WidgetTester tester) async {
-  Finder field(String key) =>
-      find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(TextFormField));
+  Finder field(String key) => find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(TextFormField));
   await tester.enterText(field('site-owner'), 'Ramesh Kumar');
   await tester.enterText(field('site-total-area'), '1000');
   await tester.pump();
@@ -254,7 +255,7 @@ void main() {
     await _openSection(tester, DashboardSection.locations);
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
-    expect(find.text('Location Name'), findsOneWidget);
+    expect(find.text('City'), findsOneWidget);
   });
 
   testWidgets('Admin menu lists Dashboard, then Transactions, Masters and Reports', (tester) async {
@@ -410,8 +411,10 @@ void main() {
     expect(find.descendant(of: find.byType(UserGreeting), matching: find.text('Priya')), findsOneWidget);
     // 1 booking to approve + 2 upcoming launches + 2 sites selling fast
     // in the sample data.
-    expect(find.descendant(of: find.byKey(const ValueKey('notification-badge')), matching: find.text('5')),
-        findsOneWidget);
+    expect(
+      find.descendant(of: find.byKey(const ValueKey('notification-badge')), matching: find.text('5')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const ValueKey('notification-bell')));
     await tester.pumpAndSettle();
@@ -468,11 +471,7 @@ void main() {
   });
 
   testWidgets('Each role gets its own menu and workspace dashboard', (tester) async {
-    final expected = {
-      'sales': MenuGroup.sales,
-      'manager': MenuGroup.construction,
-      'incharge': MenuGroup.siteWork,
-    };
+    final expected = {'sales': MenuGroup.sales, 'manager': MenuGroup.construction, 'incharge': MenuGroup.siteWork};
 
     for (final size in [desktop, tablet, phone]) {
       for (final entry in expected.entries) {
@@ -527,8 +526,13 @@ void main() {
       await _openSection(tester, DashboardSection.users);
       expect(find.byType(UsersSection), findsOneWidget);
       expect(find.byKey(const ValueKey('user-sales')), findsOneWidget);
-      // The signed-in admin cannot remove themselves.
-      expect(find.byKey(const ValueKey('user-menu-admin')), findsNothing);
+      // The signed-in admin can edit but not remove themselves.
+      await tester.tap(find.byKey(const ValueKey('user-menu-admin')));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit user'), findsOneWidget);
+      expect(find.text('Remove user'), findsNothing);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
 
       await tester.tap(size == phone ? find.byType(FloatingActionButton) : find.text('Add User'));
       await tester.pumpAndSettle();
@@ -544,7 +548,12 @@ void main() {
 
       await tester.enterText(find.byKey(const ValueKey('user-name')), 'Anil Kumar');
       await tester.enterText(find.byKey(const ValueKey('user-username')), 'anil');
-      await tester.enterText(find.byKey(const ValueKey('user-password')), 'secret1');
+      await tester.enterText(find.byKey(const ValueKey('user-password')), 'short');
+      await tester.ensureVisible(find.byKey(const ValueKey('user-submit')));
+      await tester.tap(find.byKey(const ValueKey('user-submit')));
+      await tester.pumpAndSettle();
+      expect(find.text('Password must be at least 8 characters.'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('user-password')), 'secret12');
       await tester.ensureVisible(find.byKey(const ValueKey('user-role')));
       await tester.tap(find.byKey(const ValueKey('user-role')));
       await tester.pumpAndSettle();
@@ -556,7 +565,7 @@ void main() {
 
       final anil = users.findByUsername('anil')!;
       expect(anil.role, UserRole.siteIncharge);
-      expect(users.authenticate('anil', 'secret1'), isNotNull);
+      expect((await (users.repository as LocalUserRepository).login('anil', 'secret12')).id, anil.id);
       expect(find.byKey(const ValueKey('user-anil')), findsOneWidget);
 
       // Filter by role.
@@ -578,6 +587,78 @@ void main() {
       expect(find.byKey(const ValueKey('user-anil')), findsNothing);
     }
   });
+  testWidgets('Admin edits a user; Admins cannot be removed and your own role is locked', (tester) async {
+    for (final size in [desktop, phone]) {
+      final users = UserController.test();
+      await users.addUser(
+        const NewUser(name: 'Second Admin', username: 'boss', password: 'secret12', role: UserRole.admin),
+      );
+      await _pumpDashboard(tester, size, user: users.findByUsername('admin'), users: users);
+      await _openSection(tester, DashboardSection.users);
+
+      Future<void> openMenu(String username) async {
+        await tester.ensureVisible(find.byKey(ValueKey('user-menu-$username')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey('user-menu-$username')));
+        await tester.pumpAndSettle();
+      }
+
+      // Another Admin: edit only, no remove.
+      await openMenu('boss');
+      expect(find.text('Edit user'), findsOneWidget);
+      expect(find.text('Remove user'), findsNothing);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
+
+      // Edit a Sales Executive: name, role, phone and a new password.
+      await openMenu('sales');
+      expect(find.text('Remove user'), findsOneWidget);
+      await tester.tap(find.text('Edit user'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit User'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const ValueKey('user-name')), matching: find.text('Priya Sharma')),
+        findsOneWidget,
+      );
+      await tester.enterText(find.byKey(const ValueKey('user-name')), 'Priya S');
+      await tester.enterText(find.byKey(const ValueKey('user-phone')), '90000 12345');
+      await tester.enterText(find.byKey(const ValueKey('user-password')), 'short');
+      await tester.ensureVisible(find.byKey(const ValueKey('user-submit')));
+      await tester.tap(find.byKey(const ValueKey('user-submit')));
+      await tester.pumpAndSettle();
+      expect(find.text('Password must be at least 8 characters.'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('user-password')), 'newpass12');
+      await tester.ensureVisible(find.byKey(const ValueKey('user-role')));
+      await tester.tap(find.byKey(const ValueKey('user-role')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Site Manager').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('user-submit')));
+      await tester.tap(find.byKey(const ValueKey('user-submit')));
+      await tester.pumpAndSettle();
+
+      final priya = users.findByUsername('sales')!;
+      expect(priya.name, 'Priya S');
+      expect(priya.role, UserRole.siteManager);
+      expect(priya.phone, '90000 12345');
+      expect((await (users.repository as LocalUserRepository).login('sales', 'newpass12')).id, priya.id);
+      expect(find.text('Priya S updated.'), findsOneWidget);
+
+      // Editing yourself: the role cannot change; a blank password keeps it.
+      await openMenu('admin');
+      await tester.tap(find.text('Edit user'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<AppDropdown<UserRole>>(find.byKey(const ValueKey('user-role'))).enabled, isFalse);
+      await tester.ensureVisible(find.byKey(const ValueKey('user-submit')));
+      await tester.tap(find.byKey(const ValueKey('user-submit')));
+      await tester.pumpAndSettle();
+      expect(users.findByUsername('admin')!.role, UserRole.admin);
+      expect((await (users.repository as LocalUserRepository).login('admin', 'kaira123')).username, 'admin');
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    }
+  });
+
   testWidgets('User cards show each person\'s role and current work', (tester) async {
     for (final size in [desktop, phone]) {
       await _pumpDashboard(tester, size, user: 'admin');
